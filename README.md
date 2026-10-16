@@ -48,7 +48,9 @@ Use Configuración → Crear respaldo ZIP antes de actualizar o mover el equipo.
 
 ## Plantilla corporativa PDF
 
-El generador está aislado en `services/pdf_service.py`. La primera versión genera una plantilla estándar, sin logotipo ni códigos institucionales inventados. Para integrar la plantilla real se puede añadir una estrategia de plantilla que dibuje los datos en las páginas base con pypdf, dejando intactos los servicios de inspección, imágenes y persistencia.
+Los informes nuevos incluyen `static/reports/Fondo.jpg` en todas sus páginas y el encabezado SIG basado en `static/reports/main.tex`: código, versión documental, fecha de control, proceso y página X de Y. El tipo de documento se adapta a **INFORME DE INSPECCIÓN PQM**. El código, versión, fecha y proceso se leen de las macros del archivo de referencia; la versión del informe y la fecha de inspección se mantienen como datos independientes en el cuerpo. El encabezado incluye el logo `static/reports/logo-ingelean.png`. Los recursos de informes se encuentran en `src/pqm_quality_manager/static/reports/`.
+
+El contenido se genera en `services/pdf_service.py` y la composición corporativa en `services/report_template.py`, sin instalar LaTeX. «Ver último informe» muestra los PDF anteriores con el formato corporativo actualizado mediante una copia de visualización, conservando el contenido guardado y el archivo original. No genera nuevas versiones de negocio al visualizar. El script de compilación Windows incluye el fondo y la referencia SIG.
 
 ## Limitaciones conocidas de esta entrega
 

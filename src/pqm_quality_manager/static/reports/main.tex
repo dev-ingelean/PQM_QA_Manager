@@ -1,0 +1,739 @@
+\documentclass[11pt,a4paper]{article}
+
+% =========================================================
+% FUENTE TIPO ARIAL / HELVETICA
+% =========================================================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage[scaled]{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+
+% =========================================================
+% PAQUETES
+% =========================================================
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage{eso-pic}
+\usepackage{titlesec}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage[table]{xcolor}
+\usepackage{lastpage}
+\usepackage{enumitem}
+\usepackage{needspace}
+\usepackage{caption}
+\usepackage{placeins}
+\usepackage[hidelinks]{hyperref}
+
+% =========================================================
+% CONFIGURACIÓN GENERAL
+% =========================================================
+\geometry{
+    left=2.35cm,
+    right=2.35cm,
+    top=3.55cm,
+    bottom=4.0cm
+}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.30em}
+
+\setstretch{1.09}
+\raggedbottom
+
+% =========================================================
+% ESPACIADO DE FIGURAS
+% =========================================================
+\setlength{\textfloatsep}{8pt}
+\setlength{\floatsep}{8pt}
+\setlength{\intextsep}{7pt}
+
+% =========================================================
+% COLORES CORPORATIVOS
+% =========================================================
+\definecolor{SIGgris}{RGB}{76,76,76}
+\definecolor{SIGgrisClaro}{RGB}{235,235,235}
+\definecolor{INGEorange}{RGB}{235,108,54}
+\definecolor{AlertaRojo}{RGB}{180,40,40}
+\definecolor{AlertaClaro}{RGB}{250,235,235}
+
+% =========================================================
+% DATOS DEL DOCUMENTO
+% =========================================================
+\newcommand{\TituloDocumento}
+{GUÍA DE ACCESO REMOTO A PANTALLAS HMI\\
+MEDIANTE REALVNC VIEWER}
+
+\newcommand{\Cliente}
+{TOMY}
+
+\newcommand{\EmpresaEmisora}
+{INGE-LEAN S.A.S.}
+
+% =========================================================
+% DATOS DEL ENCABEZADO SIG
+% =========================================================
+\newcommand{\CodigoDocumento}{SIG-OP-INF-01}
+\newcommand{\VersionDocumento}{001}
+\newcommand{\FechaDocumento}{30/09/2026}
+
+\newcommand{\TipoDocumento}
+{GUÍA DE USUARIO}
+
+\newcommand{\ProcesoDocumento}
+{OPERACIONES}
+
+% =========================================================
+% FONDO CORPORATIVO
+% =========================================================
+\IfFileExists{Fondo.jpg}{
+    \AddToShipoutPictureBG{
+        \includegraphics[
+            width=\paperwidth,
+            height=\paperheight
+        ]{Fondo.jpg}
+    }
+}{}
+
+% =========================================================
+% ENCABEZADO CORPORATIVO SIG
+% =========================================================
+\newcommand{\EncabezadoSIG}{%
+\begingroup
+
+\renewcommand{\arraystretch}{0.90}
+\setlength{\tabcolsep}{3pt}
+
+\begin{minipage}{\textwidth}
+
+\begin{tabularx}{\textwidth}
+{
+|>{\centering\arraybackslash}m{0.255\textwidth}
+|>{\centering\arraybackslash}X
+|>{\centering\arraybackslash}m{0.085\textwidth}
+|>{\centering\arraybackslash}m{0.105\textwidth}|
+}
+
+\hline
+
+\multicolumn{4}{|c|}{
+    \cellcolor{SIGgris}
+    \color{white}
+    \rule{0pt}{3.6mm}
+    \textbf{\scriptsize SISTEMA INTEGRADO DE GESTIÓN (SIG)}
+}
+\\
+
+\hline
+
+\multirow{4}{*}{
+    \begin{minipage}[c][1.65cm][c]{0.235\textwidth}
+        \centering
+
+        \IfFileExists{logo-ingelean.png}{
+            \includegraphics[
+                width=0.95\linewidth,
+                height=1.40cm,
+                keepaspectratio
+            ]{logo-ingelean.png}
+        }{
+            {\large\textbf{INGE-LEAN}}
+        }
+
+    \end{minipage}
+}
+
+&
+\multirow{2}{*}{
+    \begin{minipage}[c][0.78cm][c]{0.40\textwidth}
+        \centering
+
+        \textbf{\scriptsize
+        TIPO DE DOCUMENTO: \TipoDocumento
+        }
+
+    \end{minipage}
+}
+
+&
+\cellcolor{SIGgris}
+\color{white}
+\textbf{\scriptsize Código:}
+
+&
+\scriptsize
+\CodigoDocumento
+
+\\
+
+\cline{3-4}
+
+&
+&
+\cellcolor{SIGgris}
+\color{white}
+\textbf{\scriptsize Versión:}
+
+&
+\scriptsize
+\VersionDocumento
+
+\\
+
+\cline{2-4}
+
+&
+\multirow{2}{*}{
+    \begin{minipage}[c][0.78cm][c]{0.40\textwidth}
+        \centering
+
+        \textbf{\scriptsize
+        PROCESO: \ProcesoDocumento
+        }
+
+    \end{minipage}
+}
+
+&
+\cellcolor{SIGgris}
+\color{white}
+\textbf{\scriptsize Fecha:}
+
+&
+\scriptsize
+\FechaDocumento
+
+\\
+
+\cline{3-4}
+
+&
+&
+\cellcolor{SIGgris}
+\color{white}
+\textbf{\scriptsize Página:}
+
+&
+\scriptsize
+\thepage\ de \pageref{LastPage}
+
+\\
+
+\hline
+
+\end{tabularx}
+
+\end{minipage}
+
+\endgroup
+}
+
+% =========================================================
+% CONFIGURACIÓN DEL ENCABEZADO
+% =========================================================
+\pagestyle{fancy}
+\fancyhf{}
+
+\setlength{\headheight}{75pt}
+\setlength{\headsep}{10pt}
+
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\fancyhead[C]{\vspace{-1.5cm}\EncabezadoSIG}
+
+% =========================================================
+% FORMATO DE SECCIONES
+% =========================================================
+\titleformat{\section}
+{\normalfont\large\bfseries}
+{\thesection.}
+{0.6em}
+{}
+
+\titleformat{\subsection}
+{\normalfont\normalsize\bfseries}
+{\thesubsection.}
+{0.5em}
+{}
+
+\titlespacing*{\section}
+{0pt}
+{0.95em}
+{0.38em}
+
+\titlespacing*{\subsection}
+{0pt}
+{0.75em}
+{0.28em}
+
+% =========================================================
+% LISTAS
+% =========================================================
+\setlist[itemize]{
+    leftmargin=1.60em,
+    itemsep=0.12em,
+    topsep=0.16em,
+    parsep=0pt
+}
+
+\setlist[enumerate]{
+    leftmargin=1.85em,
+    itemsep=0.12em,
+    topsep=0.16em,
+    parsep=0pt
+}
+
+% =========================================================
+% CONFIGURACIÓN DE PIES DE IMAGEN
+% =========================================================
+\captionsetup{
+    font=small,
+    labelfont=bf,
+    justification=centering,
+    singlelinecheck=false,
+    skip=4pt
+}
+
+% =========================================================
+% DOCUMENTO
+% =========================================================
+\begin{document}
+
+% =========================================================
+% PORTADA
+% =========================================================
+
+\vspace*{0.02cm}
+
+\begin{center}
+
+{\LARGE\bfseries
+\TituloDocumento
+}
+
+\vspace{0.55cm}
+
+\vspace{0.55cm}
+
+\begin{tabular}{>{\bfseries}l l}
+
+Cliente: &
+\Cliente
+\\[0.14cm]
+
+Empresa ejecutora: &
+\EmpresaEmisora
+\\[0.14cm]
+
+Aplicación: &
+Acceso remoto a pantallas HMI
+\\
+
+\end{tabular}
+
+\end{center}
+
+\vspace{0.30cm}
+
+% =========================================================
+% 1. OBJETIVO
+% =========================================================
+\section{Objetivo}
+
+El presente documento tiene como finalidad explicar el procedimiento
+básico para acceder de forma remota a las pantallas HMI mediante el
+software RealVNC Viewer.
+
+La guía aplica a las pantallas HMI correspondientes a los equipos Horno,
+Laminación y Hojadrador conectados a la red interna.
+
+Además del procedimiento de conexión, se establecen las consideraciones
+de seguridad y responsabilidad asociadas al uso del acceso remoto.
+
+% =========================================================
+% 2. ADVERTENCIA IMPORTANTE
+% =========================================================
+\section{Advertencia sobre el acceso remoto}
+
+\begin{center}
+
+\renewcommand{\arraystretch}{1.18}
+
+\begin{tabularx}{0.95\textwidth}{
+|>{\raggedright\arraybackslash}X|
+}
+
+\hline
+
+\cellcolor{AlertaClaro}
+
+\textbf{\color{AlertaRojo}IMPORTANTE:}
+
+El acceso mediante RealVNC Viewer no corresponde únicamente a una
+visualización de la pantalla.
+
+Al establecer la conexión remota, el usuario puede interactuar
+directamente con la HMI de la misma manera que si estuviera operándola
+físicamente frente al equipo.
+
+\\
+
+\hline
+
+\end{tabularx}
+
+\end{center}
+
+Cualquier comando realizado desde la conexión remota puede generar una
+acción directa sobre el sistema.
+
+Dependiendo de la pantalla y del modo de operación disponible, el usuario
+puede tener acceso a funciones como:
+
+\begin{itemize}
+
+    \item accionamiento o detención de equipos desde los mandos manuales;
+
+    \item modificación de frecuencias o referencias de operación;
+
+    \item cambio de parámetros utilizados durante el proceso;
+
+    \item activación o desactivación de elementos disponibles desde la HMI;
+
+    \item ejecución de comandos mientras otro operador se encuentra
+    trabajando directamente sobre la máquina.
+
+\end{itemize}
+
+Un cambio incorrecto de parámetros o una maniobra realizada sin verificar
+previamente el estado del equipo puede afectar la operación de la máquina
+o el proceso productivo.
+
+Por esta razón, el acceso remoto debe ser utilizado únicamente por
+personal autorizado y con conocimiento de la operación del equipo.
+
+\textbf{Las acciones realizadas durante una sesión remota y las
+consecuencias derivadas de los comandos o modificaciones ejecutadas desde
+la HMI serán responsabilidad de la persona que realice la conexión.}
+
+Antes de realizar cualquier maniobra se recomienda confirmar con el
+personal de operación el estado actual de la máquina.
+
+% =========================================================
+% 3. APERTURA DE REALVNC
+% =========================================================
+
+\Needspace{0.54\textheight}
+
+\section{Apertura de RealVNC Viewer}
+
+Al abrir RealVNC Viewer se mostrará la pantalla principal del programa.
+
+Si todavía no se han guardado conexiones, el área central aparecerá
+vacía y no se mostrarán dispositivos registrados.
+
+En la parte superior de la ventana se encuentra la barra utilizada para
+ingresar la dirección IP del equipo al que se desea acceder.
+
+\vspace{0.10cm}
+
+\begin{center}
+
+\IfFileExists{Pantalla_Incial.jpeg}{
+
+    \includegraphics[
+        width=0.93\textwidth,
+        height=0.39\textheight,
+        keepaspectratio
+    ]{Pantalla_Incial.jpeg}
+
+}{
+    \fbox{
+        \parbox[c][6.2cm][c]{0.88\textwidth}{
+            \centering
+            Pantalla inicial de RealVNC Viewer
+        }
+    }
+}
+
+\captionof{figure}{
+Pantalla inicial de RealVNC Viewer antes de registrar las conexiones.
+}
+
+\end{center}
+
+% =========================================================
+% 4. INGRESO DE DIRECCIÓN IP
+% =========================================================
+
+\Needspace{0.72\textheight}
+
+\section{Ingreso de la dirección IP}
+
+Para iniciar una nueva conexión, se debe ingresar en la barra superior la
+dirección IP correspondiente a la pantalla HMI que se desea controlar.
+
+En la siguiente imagen se resalta el campo donde debe escribirse la
+dirección IP.
+
+\vspace{0.10cm}
+
+\begin{center}
+
+\IfFileExists{Ubicacion_IP.jpeg}{
+
+    \includegraphics[
+        width=0.96\textwidth,
+        height=0.39\textheight,
+        keepaspectratio
+    ]{Ubicacion_IP.jpeg}
+
+}{
+    \fbox{
+        \parbox[c][6.0cm][c]{0.90\textwidth}{
+            \centering
+            Ubicación para ingresar la dirección IP
+        }
+    }
+}
+
+\captionof{figure}{
+Campo de RealVNC Viewer utilizado para ingresar la dirección IP de la HMI.
+}
+
+\end{center}
+
+\vspace{0.05cm}
+
+Las direcciones configuradas son las siguientes:
+
+\vspace{0.08cm}
+
+\begin{center}
+
+\renewcommand{\arraystretch}{1.18}
+
+\begin{tabularx}{0.76\textwidth}{
+|>{\raggedright\arraybackslash}X
+|>{\centering\arraybackslash}m{4.0cm}|
+}
+
+\hline
+
+\cellcolor{SIGgrisClaro}
+\textbf{Pantalla HMI}
+&
+\cellcolor{SIGgrisClaro}
+\textbf{Dirección IP}
+\\
+
+\hline
+
+HMI\_HORNO
+&
+192.168.4.81
+\\
+
+\hline
+
+HMI\_LAMINACION
+&
+192.168.4.90
+\\
+
+\hline
+
+HMI\_HOJADRADOR
+&
+192.168.4.109
+\\
+
+\hline
+
+\end{tabularx}
+
+\end{center}
+
+\vspace{0.02cm}
+
+Una vez ingresada la dirección IP correspondiente, se debe presionar
+\textbf{Enter} para iniciar la conexión.
+
+% =========================================================
+% 5. CONTRASEÑA
+% =========================================================
+
+\Needspace{9\baselineskip}
+
+\section{Contraseña de acceso}
+
+Durante la primera conexión, RealVNC Viewer solicitará la contraseña
+configurada para el acceso remoto a la HMI.
+
+La contraseña actualmente establecida es:
+
+\vspace{-0.08cm}
+
+\begin{center}
+
+\fbox{
+    \parbox[c][0.75cm][c]{4.6cm}{
+        \centering
+        \large\textbf{12345678}
+    }
+}
+
+\end{center}
+
+\vspace{-0.08cm}
+
+Después de ingresar correctamente la contraseña, se podrá establecer la
+conexión con la pantalla seleccionada.
+
+La contraseña debe ser utilizada únicamente por personal autorizado y no
+debe compartirse con personas ajenas a la operación o mantenimiento de
+los equipos.
+
+% =========================================================
+% 6. CONEXIONES GUARDADAS
+% =========================================================
+
+\Needspace{0.66\textheight}
+
+\section{Conexiones guardadas}
+
+Una vez realizada la conexión, RealVNC Viewer permite conservar los
+dispositivos registrados para facilitar accesos posteriores.
+
+Después de guardar las conexiones, las tres pantallas aparecerán en la
+ventana principal del programa.
+
+\vspace{0.10cm}
+
+\begin{center}
+
+\IfFileExists{Pantallas_Guardadas.png}{
+
+    \includegraphics[
+        width=0.94\textwidth,
+        height=0.39\textheight,
+        keepaspectratio
+    ]{Pantallas_Guardadas.png}
+
+}{
+    \fbox{
+        \parbox[c][6.0cm][c]{0.88\textwidth}{
+            \centering
+            Pantallas HMI guardadas en RealVNC Viewer
+        }
+    }
+}
+
+\captionof{figure}{
+Pantallas HMI registradas y disponibles para acceso desde RealVNC Viewer.
+}
+
+\end{center}
+
+\vspace{0.02cm}
+
+Las conexiones corresponden a:
+
+\begin{itemize}
+
+    \item \textbf{192.168.4.81} -- HMI\_HORNO;
+
+    \item \textbf{192.168.4.90} -- HMI\_LAMINACION;
+
+    \item \textbf{192.168.4.109} -- HMI\_HOJADRADOR.
+
+\end{itemize}
+
+Mientras el computador se encuentre conectado al mismo segmento de red
+de las pantallas HMI, para ingresar nuevamente será suficiente seleccionar
+la pantalla correspondiente y abrir la conexión.
+
+% =========================================================
+% 7. CONDICIONES DE CONEXIÓN
+% =========================================================
+
+\Needspace{14\baselineskip}
+
+\section{Condiciones necesarias para el acceso}
+
+Para establecer correctamente una conexión remota se debe verificar que:
+
+\begin{itemize}
+
+    \item el computador se encuentre conectado a la red correspondiente;
+
+    \item el computador y la HMI se encuentren dentro del mismo segmento
+    de red;
+
+    \item exista comunicación con la dirección IP de la HMI;
+
+    \item la pantalla HMI se encuentre energizada y disponible;
+
+    \item el usuario cuente con autorización para realizar el acceso.
+
+\end{itemize}
+
+Si alguna de estas condiciones no se cumple, la conexión puede no estar
+disponible aunque el dispositivo haya sido registrado previamente en
+RealVNC Viewer.
+
+% =========================================================
+% 8. CONSIDERACIONES DE USO
+% =========================================================
+
+\Needspace{14\baselineskip}
+
+\section{Consideraciones de uso}
+
+Durante una sesión remota, las acciones realizadas se reflejan
+directamente sobre la HMI del equipo.
+
+Antes de ejecutar comandos manuales o modificar valores de operación se
+debe verificar el estado de la máquina y coordinar la intervención con el
+personal responsable del proceso.
+
+No se deben modificar frecuencias, referencias, parámetros de control ni
+mandos manuales si no se conoce previamente el efecto que dicho cambio
+puede generar sobre el sistema.
+
+Cuando exista personal trabajando directamente sobre la máquina, deberá
+existir coordinación previa antes de realizar cualquier operación desde
+RealVNC.
+
+Al finalizar una revisión o intervención remota, se recomienda cerrar la
+sesión para evitar operaciones accidentales posteriores.
+
+% =========================================================
+% 9. CONCLUSIÓN
+% =========================================================
+
+\Needspace{12\baselineskip}
+
+\section{Conclusión}
+
+RealVNC Viewer permite acceder remotamente a las pantallas HMI de Horno,
+Laminación y Hojadrador desde un computador conectado a la misma red.
+
+Esta herramienta facilita actividades de revisión y soporte sin necesidad
+de encontrarse físicamente frente a cada pantalla.
+
+Sin embargo, el acceso remoto permite interactuar directamente con los
+controles disponibles en la HMI y debe utilizarse con el mismo nivel de
+precaución que una operación realizada localmente.
+
+\textbf{El usuario que establezca la conexión será responsable de las
+acciones ejecutadas durante la sesión remota y deberá evitar cualquier
+modificación que pueda afectar la operación normal del equipo o del
+proceso productivo.}
+
+\end{document}

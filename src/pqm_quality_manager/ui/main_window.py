@@ -176,11 +176,13 @@ class HistoryPage(QWidget):
     def view_report(self):
         iid=self.selected_id()
         if not iid:return QMessageBox.information(self,"Informe","Seleccione una inspección.")
-        with SessionLocal() as s:
-            report=s.scalar(select(Report).where(Report.inspection_id==iid).order_by(Report.created_at.desc()))
-            path=materialize(s, report.path, DATA_DIR) if report else None
-        if not path or not path.exists():return QMessageBox.information(self,"Informe","Esta inspección todavía no tiene un PDF guardado.")
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        try:
+            path=PDFReportService().latest_path(iid)
+            if path is None:
+                return QMessageBox.information(self,"Informe","Esta inspección todavía no tiene un PDF guardado.")
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        except Exception as error:
+            QMessageBox.warning(self,"No se pudo abrir el informe",str(error))
     def duplicate(self):
         iid=self.selected_id()
         if iid:

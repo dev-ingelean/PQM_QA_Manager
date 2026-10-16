@@ -1,6 +1,8 @@
 from pathlib import Path
 from uuid import uuid4
 from io import BytesIO
+from hashlib import sha256
+from pypdf import PdfReader
 import re
 from datetime import datetime
 from reportlab.lib import colors
@@ -15,10 +17,38 @@ from pqm_quality_manager.database.engine import SessionLocal
 from pqm_quality_manager.database.models import Inspection, Report
 from pqm_quality_manager.services.image_service import ImageService
 from pqm_quality_manager.services.inspection_service import InspectionError
-from pqm_quality_manager.services.file_storage import store
+from pqm_quality_manager.services.file_storage import store, materialize
 from pqm_quality_manager.services.checkpoint_service import checkpoint
+from pqm_quality_manager.services.report_template import apply_template, template_signature, LEFT_MARGIN, RIGHT_MARGIN, TOP_MARGIN, BOTTOM_MARGIN
 
 class PDFReportService:
+    def latest_path(self, inspection_id):
+        """Open the last saved content with current branding, keeping originals immutable."""
+        with SessionLocal() as session:
+            report = session.scalar(select(Report).where(Report.inspection_id == inspection_id)
+                                    .order_by(Report.version.desc(), Report.id.desc()))
+            if report is None:
+                return None
+            source = materialize(session, report.path, DATA_DIR)
+        if not source.is_file():
+            raise InspectionError("No se encuentra el archivo del último informe guardado.")
+        signature = template_signature()
+        reader = PdfReader(source)
+        if reader.metadata and reader.metadata.get("/PQMTemplate") == signature:
+            return source
+        key = sha256(source.read_bytes() + signature.encode()).hexdigest()
+        preview_dir = REPORT_DIR / "previews"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        preview = preview_dir / f"SIG_{key}.pdf"
+        if not preview.exists():
+            temporary = preview_dir / f".{uuid4().hex}.tmp"
+            try:
+                apply_template(source, temporary, fit_existing=True)
+                temporary.replace(preview)
+            finally:
+                temporary.unlink(missing_ok=True)
+        return preview
+
     def generate(self, inspection_id: int, report_type="BORRADOR") -> Path:
         if report_type not in {"BORRADOR", "FINAL", "HISTORICO"}: raise ValueError("Tipo de informe inválido")
         with SessionLocal() as s:
@@ -48,12 +78,13 @@ class PDFReportService:
         return out
 
     def _render(self, path, pqm, company, act, inspection_date, author, reviewer, status, general_obs, conclusion, groups, report_type, version):
-        doc = SimpleDocTemplate(str(path), pagesize=A4, rightMargin=16*mm, leftMargin=16*mm, topMargin=17*mm, bottomMargin=17*mm, title=f"Informe PQM {pqm}", author="INGELEAN S.A.S.")
+        content = BytesIO()
+        doc = SimpleDocTemplate(content, pagesize=A4, rightMargin=RIGHT_MARGIN, leftMargin=LEFT_MARGIN, topMargin=TOP_MARGIN, bottomMargin=BOTTOM_MARGIN, title=f"Informe PQM {pqm}", author="INGELEAN S.A.S.")
         styles = getSampleStyleSheet()
         styles.add(ParagraphStyle(name="PQMTitle", parent=styles["Title"], textColor=colors.HexColor("#12365a"), fontSize=19, leading=24, spaceAfter=6))
         styles.add(ParagraphStyle(name="PQMSection", parent=styles["Heading2"], textColor=colors.HexColor("#145b83"), fontSize=12, leading=15, spaceBefore=9, spaceAfter=5))
         styles.add(ParagraphStyle(name="Small", parent=styles["BodyText"], fontSize=8.5, leading=11))
-        story = [Paragraph("INGELEAN S.A.S.", styles["PQMTitle"]), Paragraph("INFORME DE INSPECCIÓN Y ENTREGA DE TABLERO PQM", styles["Heading2"])]
+        story = [Paragraph("INFORME DE INSPECCIÓN Y ENTREGA DE TABLERO PQM", styles["PQMTitle"])]
         if report_type == "BORRADOR": story.append(Paragraph("<b>DOCUMENTO PRELIMINAR — BORRADOR</b>", styles["Heading2"]))
         story += [Spacer(1, 5), self._table([["Registro PQM", pqm, "Acta", act], ["Fecha", inspection_date.strftime("%Y-%m-%d"), "Estado", status], ["Empresa", company, "Versión", str(version)]], [27*mm, 53*mm, 20*mm, 62*mm]), Spacer(1, 8), Paragraph("Información general", styles["PQMSection"]), Paragraph(f"<b>Elaborado por:</b> {self._esc(author)} &nbsp;&nbsp; <b>Revisado por:</b> {self._esc(reviewer or 'Pendiente')}", styles["BodyText"])]
         if general_obs: story.append(Paragraph(f"<b>Observaciones generales:</b> {self._esc(general_obs)}", styles["BodyText"]))
@@ -77,25 +108,31 @@ class PDFReportService:
                                 im = ImageOps.exif_transpose(im).convert("RGB")
                                 im.thumbnail((780, 520))
                                 buffer = BytesIO(); im.save(buffer, "JPEG", quality=82); buffer.seek(0)
-                            pic = PDFImage(buffer, width=82*mm, height=55*mm, kind="proportional")
+                            pic = PDFImage(buffer, width=doc.width/2-6*mm, height=55*mm, kind="proportional")
                             cells.append([pic, Paragraph(self._esc(original), styles["Small"])])
                         except Exception as exc:
                             cells.append(Paragraph(f"No se pudo incluir {self._esc(original)}: {self._esc(str(exc))}", styles["Small"]))
                 for i in range(0, len(cells), 2):
                     rowcells = cells[i:i+2]
                     if len(rowcells) == 1: rowcells.append("")
-                    story.append(Table([rowcells], colWidths=[85*mm, 85*mm], style=TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"), ("LEFTPADDING",(0,0),(-1,-1),2), ("RIGHTPADDING",(0,0),(-1,-1),2)])))
+                    story.append(Table([rowcells], colWidths=[doc.width/2, doc.width/2], style=TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"), ("LEFTPADDING",(0,0),(-1,-1),2), ("RIGHTPADDING",(0,0),(-1,-1),2)])))
             else: story.append(Paragraph("Sin fotografías adjuntas.", styles["Small"]))
             story.append(Spacer(1,5))
         counts = {k: sum(1 for g in groups if g[3] == k) for k in ("Conforme", "No conforme", "No aplica", "Pendiente")}
         story += [Paragraph("Resumen de inspección", styles["PQMSection"]), self._table([["Total evidencias", str(len(groups)), "Documentadas", str(sum(bool(g[8]) for g in groups))], ["Conformes", str(counts["Conforme"]), "No conformes", str(counts["No conforme"])], ["No aplican", str(counts["No aplica"]), "Pendientes", str(counts["Pendiente"])]], [35*mm, 30*mm, 35*mm, 62*mm])]
         if conclusion: story.append(Paragraph(f"<b>Conclusión técnica:</b> {self._esc(conclusion)}", styles["BodyText"]))
         story.append(Spacer(1, 16)); story.append(Paragraph(f"Elaborado por: {self._esc(author)} &nbsp;&nbsp;&nbsp; Revisado por: {self._esc(reviewer or 'Pendiente')}", styles["Small"]))
-        doc.build(story, onFirstPage=self._footer, onLaterPages=self._footer)
+        doc.build(story)
+        content.seek(0)
+        apply_template(content, path)
 
     @staticmethod
     def _table(rows, widths):
-        t = Table(rows, colWidths=widths, repeatRows=0)
+        normal = ParagraphStyle("TableValue", fontName="Helvetica", fontSize=8.5, leading=11)
+        bold = ParagraphStyle("TableLabel", parent=normal, fontName="Helvetica-Bold")
+        wrapped = [[Paragraph(PDFReportService._esc(value), bold if col in (0, 2) else normal)
+                    for col, value in enumerate(row)] for row in rows]
+        t = Table(wrapped, colWidths=widths, repeatRows=0)
         t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#cbd5df")), ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#edf3f8")), ("BACKGROUND",(2,0),(2,-1),colors.HexColor("#edf3f8")), ("FONTNAME",(0,0),(0,-1),"Helvetica-Bold"), ("FONTNAME",(2,0),(2,-1),"Helvetica-Bold"), ("FONTSIZE",(0,0),(-1,-1),8.5), ("VALIGN",(0,0),(-1,-1),"MIDDLE"), ("LEFTPADDING",(0,0),(-1,-1),6), ("RIGHTPADDING",(0,0),(-1,-1),6), ("TOPPADDING",(0,0),(-1,-1),6), ("BOTTOMPADDING",(0,0),(-1,-1),6)]))
         return t
 
@@ -103,10 +140,3 @@ class PDFReportService:
     def _esc(v):
         from xml.sax.saxutils import escape
         return escape(str(v or ""))
-
-    @staticmethod
-    def _footer(canvas, doc):
-        canvas.saveState(); canvas.setFont("Helvetica", 8); canvas.setFillColor(colors.HexColor("#657386"))
-        canvas.drawString(16*mm, 9*mm, "INGELEAN S.A.S. | Informe de inspección PQM")
-        canvas.drawRightString(A4[0]-16*mm, 9*mm, f"Página {doc.page}")
-        canvas.restoreState()
