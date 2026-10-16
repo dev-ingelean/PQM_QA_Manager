@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from sqlalchemy import String, Text, Integer, Date, DateTime, Float, Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Text, Integer, Date, DateTime, Float, Boolean, ForeignKey, LargeBinary, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
@@ -89,3 +89,19 @@ class AppSetting(Base):
     __tablename__ = "app_settings"
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text, default="")
+
+
+class InspectionCheckpoint(Base):
+    __tablename__ = "inspection_checkpoints"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    inspection_id: Mapped[int] = mapped_column(ForeignKey("inspections.id"), index=True)
+    reason: Mapped[str] = mapped_column(String(100))
+    snapshot: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class StoredFile(Base):
+    """Original files in the database; filesystem copies are disposable cache."""
+    __tablename__ = "stored_files"
+    path: Mapped[str] = mapped_column(String(500), primary_key=True)
+    content: Mapped[bytes] = mapped_column(LargeBinary)

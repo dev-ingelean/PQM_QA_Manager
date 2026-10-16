@@ -1,6 +1,6 @@
 # PQM Quality Manager
 
-Aplicación de escritorio local en español para registrar inspecciones y entregas de tableros PQM de INGELEAN S.A.S.
+Aplicación de escritorio en español para registrar inspecciones y entregas de tableros PQM de INGELEAN S.A.S.
 
 ## Requisitos y ejecución
 
@@ -24,13 +24,19 @@ Para ejecutar las pruebas: `uv sync --extra dev` y `uv run pytest`.
 - Configuración SMTP, credencial protegida con keyring y prueba explícita.
 - Respaldos ZIP y restauración validada con copia preventiva.
 
+## PostgreSQL y guardado automático
+
+Admite PostgreSQL en un servidor y SQLite local. La conexión se configura en **Configuración → Base de datos**, con campos de servidor, puerto, base, usuario y contraseña, prueba de conexión y guardado por equipo. Si falla al iniciar, permite corregirla antes de abrir los datos. `.env` sigue siendo compatible cuando no hay una configuración guardada desde la app. La aplicación se conecta directamente a la IP del servidor por la red local. El editor guarda avances automáticamente y mantiene checkpoints consultables; fotos originales y PDF nuevos también quedan en la base. Incluye migración transaccional de los registros y archivos existentes.
+
+Consulta [la guía de despliegue, conexión, migración y respaldo](docs/postgresql.md). Los archivos para desplegar PostgreSQL con Docker Compose están en `deploy/`.
+
 ## Datos locales
 
 En Windows: `%APPDATA%/Ingelean/PQMQualityManager`.
 
 En Linux: `~/.local/share/Ingelean/PQMQualityManager` (o `$XDG_DATA_HOME/Ingelean/PQMQualityManager`).
 
-La carpeta contiene SQLite, fotos, informes, miniaturas y logs. No se almacenan contraseñas SMTP en SQLite.
+La carpeta contiene SQLite (si se usa modo local), caché de fotos e informes, miniaturas y logs. Las contraseñas SMTP se conservan en el llavero del sistema. En PostgreSQL los registros y archivos se almacenan en el servidor.
 
 ## Compilar para Windows
 

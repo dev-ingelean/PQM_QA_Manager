@@ -7,6 +7,8 @@ from pqm_quality_manager.config.settings import DATA_DIR, PHOTO_DIR, THUMB_DIR
 from pqm_quality_manager.database.engine import SessionLocal
 from pqm_quality_manager.database.models import InspectionEvidence, EvidenceImage
 from pqm_quality_manager.services.inspection_service import InspectionService
+from pqm_quality_manager.services.checkpoint_service import checkpoint
+from pqm_quality_manager.services.file_storage import store, materialize
 
 class ImageService:
     ALLOWED = {".jpg", ".jpeg", ".png"}
@@ -37,8 +39,10 @@ class ImageService:
                         hasher.update(chunk)
                 digest = hasher.hexdigest()
                 record = EvidenceImage(evidence_id=e.id, relative_path=dest.relative_to(DATA_DIR).as_posix(), original_name=src.name, order=len(e.images), size_bytes=dest.stat().st_size, sha256=digest)
-                s.add(record); added.append(dest)
+                s.add(record); e.images.append(record); added.append(dest)
+                store(s, record.relative_path, dest)
             e.inspection.updated_at = datetime.now()
+            checkpoint(s, e.inspection, "Fotografías añadidas")
             s.commit()
         return added
 
@@ -46,7 +50,8 @@ class ImageService:
     def absolute(relative_path):
         path = (DATA_DIR / relative_path).resolve()
         if DATA_DIR.resolve() not in path.parents: raise ValueError("Ruta de imagen inválida")
-        return path
+        with SessionLocal() as session:
+            return materialize(session, relative_path, DATA_DIR)
 
     def delete(self, image_id):
         with SessionLocal() as s:
@@ -54,7 +59,12 @@ class ImageService:
             if not img: return
             InspectionService._editable(img.evidence.inspection)
             path = self.absolute(img.relative_path)
-            s.delete(img); s.commit()
+            inspection = img.evidence.inspection
+            img.evidence.images.remove(img)
+            s.delete(img)
+            inspection.updated_at = datetime.now()
+            checkpoint(s, inspection, "Fotografía eliminada")
+            s.commit()
             if path.exists(): path.unlink()
 
     @staticmethod

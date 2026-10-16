@@ -1,6 +1,11 @@
 """Rutas y ajustes locales del usuario."""
 from pathlib import Path
 import os
+from dotenv import load_dotenv
+
+# Environment variables take precedence over the local, untracked configuration.
+load_dotenv(Path(__file__).resolve().parents[3] / ".env", override=False)
+DATABASE_URL = os.environ.get("PQM_DATABASE_URL", "").strip()
 
 APP_NAME = "PQM Quality Manager"
 ORG_NAME = "INGELEAN S.A.S."

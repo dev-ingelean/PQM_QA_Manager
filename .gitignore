@@ -6,3 +6,9 @@ dist/
 build/
 *.spec
 data/
+
+.env
+.env.*
+!.env.example
+deploy/secrets/
+*.dump

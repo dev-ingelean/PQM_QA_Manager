@@ -1,8 +1,10 @@
 from pathlib import Path
-from PySide6.QtCore import Qt, QDate, QSize
+from datetime import datetime
+import json
+from PySide6.QtCore import Qt, QDate, QSize, QTimer
 from PySide6.QtGui import QPixmap, QDesktopServices
 from PySide6.QtCore import QUrl
-from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QPushButton, QLabel, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QLineEdit, QComboBox, QMessageBox, QDialog, QFormLayout, QDateEdit, QTextEdit, QDialogButtonBox, QListWidget, QListWidgetItem, QSplitter, QGroupBox, QDoubleSpinBox, QFileDialog, QInputDialog, QProgressBar, QCheckBox, QSpinBox)
+from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QPushButton, QLabel, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QLineEdit, QComboBox, QMessageBox, QDialog, QFormLayout, QDateEdit, QTextEdit, QDialogButtonBox, QListWidget, QListWidgetItem, QSplitter, QGroupBox, QDoubleSpinBox, QFileDialog, QInputDialog, QProgressBar, QCheckBox, QSpinBox, QScrollArea)
 from sqlalchemy import select
 from pqm_quality_manager.services.inspection_service import InspectionService, InspectionError
 from pqm_quality_manager.services.image_service import ImageService
@@ -11,7 +13,11 @@ from pqm_quality_manager.services.backup_service import BackupService
 from pqm_quality_manager.services.email_service import EmailService
 from pqm_quality_manager.database.engine import SessionLocal
 from pqm_quality_manager.database.models import AppSetting, Inspection, Report, EmailDispatch
+from pqm_quality_manager.database import engine as database_engine
+from pqm_quality_manager.services.file_storage import materialize
+from pqm_quality_manager.services.checkpoint_service import history
 from pqm_quality_manager.config.settings import DATA_DIR
+from pqm_quality_manager.ui.database_settings import DatabaseSettings
 
 NAVY = "#12365A"; BLUE = "#176B9B"; BG = "#F3F6F9"
 
@@ -27,7 +33,7 @@ class MainWindow(QMainWindow):
             b=QPushButton(title); b.setCursor(Qt.PointingHandCursor); b.setStyleSheet("text-align:left;padding:13px 16px;color:white;border:0;background:transparent;font-size:14px;"); b.clicked.connect(lambda _, k=key: self.navigate(k)); sv.addWidget(b)
         sv.addStretch(); sv.addWidget(QLabel("Versión 0.1.0", alignment=Qt.AlignCenter)); outer.addWidget(side); outer.addWidget(self.stack,1)
         self.setCentralWidget(root)
-        self.pages["home"] = DashboardPage(self); self.pages["history"] = HistoryPage(self); self.pages["settings"] = SettingsPage(self)
+        self.pages["home"] = DashboardPage(self); self.pages["history"] = HistoryPage(self); settings_scroll = QScrollArea();settings_scroll.setWidgetResizable(True);settings_scroll.setWidget(SettingsPage(self));self.pages["settings"] = settings_scroll
         for page in self.pages.values(): self.stack.addWidget(page)
         self.setStyleSheet(f"QMainWindow{{background:{BG};}} QLabel{{color:#263746;}} QPushButton.primary{{background:{BLUE};color:white;border:0;border-radius:5px;padding:9px 14px;font-weight:600;}} QPushButton{{padding:7px 10px;}} QLineEdit,QComboBox,QDateEdit,QTextEdit,QSpinBox{{padding:6px;border:1px solid #ccd6df;border-radius:4px;background:white;}} QTableWidget{{background:white;gridline-color:#e3e8ed;}} QGroupBox{{font-weight:600;}}")
         self.navigate("home")
@@ -111,7 +117,7 @@ class HistoryPage(QWidget):
         if not iid:return QMessageBox.information(self,"Informe","Seleccione una inspección.")
         with SessionLocal() as s:
             report=s.scalar(select(Report).where(Report.inspection_id==iid).order_by(Report.created_at.desc()))
-            path=(DATA_DIR/report.path) if report else None
+            path=materialize(s, report.path, DATA_DIR) if report else None
         if not path or not path.exists():return QMessageBox.information(self,"Informe","Esta inspección todavía no tiene un PDF guardado.")
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
     def duplicate(self):
@@ -139,7 +145,14 @@ class InspectionForm(QDialog):
 class InspectionEditor(QDialog):
     def __init__(self,parent,iid):
         super().__init__(parent);self.main=parent;self.iid=iid;self.service=parent.service;self.images=ImageService();self.setWindowTitle("Inspección PQM");self.resize(1180,760);self.current=None
+        self._loading = False
+        self._saving = False
+        self.autosave_timer = QTimer(self)
+        self.autosave_timer.setSingleShot(True)
+        self.autosave_timer.setInterval(1500)
+        self.autosave_timer.timeout.connect(self.autosave)
         outer=QVBoxLayout(self); self.heading=QLabel();self.heading.setStyleSheet("font-size:22px;font-weight:700;");outer.addWidget(self.heading)
+        self.save_status = QLabel("Sin cambios pendientes"); outer.addWidget(self.save_status)
         self.progress_label=QLabel();outer.addWidget(self.progress_label);self.progress=QProgressBar();outer.addWidget(self.progress)
         split=QSplitter();self.list=QListWidget();self.list.currentItemChanged.connect(self.select_evidence);split.addWidget(self.list)
         right=QWidget();rv=QVBoxLayout(right);self.info=QLabel();self.info.setStyleSheet("font-size:16px;font-weight:700;");rv.addWidget(self.info)
@@ -153,57 +166,145 @@ class InspectionEditor(QDialog):
         bottom=QHBoxLayout();save=QPushButton("Guardar datos generales");save.clicked.connect(self.save_general);bottom.addWidget(save);bottom.addStretch()
         for label,target in [("Enviar a revisión","PENDIENTE_REVISION"),("Aprobar","APROBADA"),("Rechazar","RECHAZADA"),("Cerrar","CERRADA")]:
             b=QPushButton(label);b.clicked.connect(lambda _,t=target:self.transition(t));bottom.addWidget(b)
+        checkpoints=QPushButton("Ver checkpoints");checkpoints.clicked.connect(self.show_checkpoints);bottom.addWidget(checkpoints)
         pdf=QPushButton("Generar PDF borrador");pdf.clicked.connect(self.pdf);bottom.addWidget(pdf);send=QPushButton("Enviar PDF aprobado");send.clicked.connect(self.send_report);bottom.addWidget(send);outer.addLayout(bottom);self.load()
+        for widget in (self.company, self.pqm, self.act, self.author, self.conclusion, self.measure, self.unit, self.na):
+            widget.textChanged.connect(self.schedule_save)
+        for widget in (self.generalobs, self.obs):
+            widget.textChanged.connect(self.schedule_save)
+        self.date.dateChanged.connect(self.schedule_save)
+        self.state.currentTextChanged.connect(self.schedule_save)
+    def general_values(self):
+        return dict(inspection_date=self.date.date().toPython(), company=self.company.text(),
+                    pqm_number=self.pqm.text(), act_number=self.act.text(), author=self.author.text(),
+                    observations=self.generalobs.toPlainText(), conclusion=self.conclusion.text())
+    def schedule_save(self, *args):
+        if not self._loading:
+            self.save_status.setText("Cambios pendientes de guardar…")
+            self.autosave_timer.start()
+    def autosave(self):
+        if self._loading or self._saving:
+            return False
+        self.autosave_timer.stop()
+        self._saving = True
+        try:
+            general = self.general_values()
+            if self.general.isEnabled() and general != self.general_snapshot:
+                self.service.update_general(self.iid, **general)
+                self.general_snapshot = general
+            if self.detail.isEnabled() and self.current and self.evidence_values() != self.evidence_snapshot:
+                status, measured_value, unit, observations, na_reason = self.evidence_values()
+                self.service.save_evidence(self.current, status=status, measured_value=measured_value,
+                                          unit=unit, observations=observations, na_reason=na_reason)
+                self.evidence_snapshot = self.evidence_values()
+            self.save_status.setText("Avance guardado · " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            return True
+        except InspectionError as error:
+            self.save_status.setText("No se guardó: " + str(error))
+            return False
+        except Exception:
+            self.save_status.setText("No se guardó el avance. Revise los campos obligatorios y la conexión; pulse Guardar para reintentar.")
+            return False
+        finally:
+            self._saving = False
+    def reject(self):
+        if self.autosave():
+            super().reject()
+        else:
+            QMessageBox.warning(self, "Cambios pendientes", "No se pudo guardar. Revise los datos y la conexión antes de cerrar.")
+    def closeEvent(self, event):
+        if self.autosave():
+            event.accept()
+        else:
+            event.ignore()
+            QMessageBox.warning(self, "Cambios pendientes", "No se pudo guardar. Revise los datos y la conexión antes de cerrar.")
+    def show_checkpoints(self):
+        if not self.autosave():
+            return
+        try:
+            with SessionLocal() as session:
+                checkpoints = history(session, self.iid)
+            dialog = QDialog(self); dialog.setWindowTitle("Últimos 100 checkpoints"); dialog.resize(800, 600)
+            layout = QVBoxLayout(dialog); entries = QComboBox(); preview = QTextEdit(); preview.setReadOnly(True)
+            for entry in checkpoints:
+                entries.addItem(f"#{entry.id} · {entry.created_at:%Y-%m-%d %H:%M:%S} · {entry.reason}", entry.snapshot)
+            entries.currentIndexChanged.connect(lambda _: preview.setPlainText(json.dumps(json.loads(entries.currentData()), indent=2, ensure_ascii=False) if entries.currentData() else "Sin checkpoints"))
+            preview.setPlainText(json.dumps(json.loads(entries.currentData()), indent=2, ensure_ascii=False) if entries.currentData() else "Sin checkpoints")
+            layout.addWidget(entries); layout.addWidget(preview); dialog.exec()
+        except Exception:
+            QMessageBox.warning(self, "Checkpoints", "No se pudo consultar el historial. Revise la conexión.")
     def load(self):
-        item=self.service.get(self.iid);self.heading.setText(f"PQM {item.pqm_number} · {item.company} · {item.status}");self.date.setDate(QDate(item.inspection_date.year,item.inspection_date.month,item.inspection_date.day));self.company.setText(item.company);self.pqm.setText(item.pqm_number);self.act.setText(item.act_number);self.author.setText(item.author);self.generalobs.setPlainText(item.observations);self.conclusion.setText(item.conclusion)
+        item = self.service.get(self.iid)
+        p = self.service.progress(self.iid)
+        self._loading = True
+        self.autosave_timer.stop()
+        self.list.blockSignals(True)
+        self.current = None
+        self.evidence_snapshot = self.evidence_values()
+        self.gallery.clear()
+        self.heading.setText(f"PQM {item.pqm_number} · {item.company} · {item.status}");self.date.setDate(QDate(item.inspection_date.year,item.inspection_date.month,item.inspection_date.day));self.company.setText(item.company);self.pqm.setText(item.pqm_number);self.act.setText(item.act_number);self.author.setText(item.author);self.generalobs.setPlainText(item.observations);self.conclusion.setText(item.conclusion)
         self.list.clear(); categories=[]
         for e in item.evidences:
             if e.category not in categories:
                 categories.append(e.category);head=QListWidgetItem("▸ "+e.category);head.setFlags(Qt.NoItemFlags);head.setBackground(Qt.lightGray);self.list.addItem(head)
             x=QListWidgetItem(f"{e.order:02d}. {e.title}  ·  {e.status}  ·  {len(e.images)} foto(s)");x.setData(Qt.UserRole,e.id);self.list.addItem(x)
-        p=self.service.progress(self.iid);self.progress.setValue(p["percent"]);self.progress_label.setText(f"Documentadas: {p['documented']}/35   |   Conformes: {p['Conforme']}   |   No conformes: {p['No conforme']}   |   No aplica: {p['No aplica']}   |   Pendientes: {p['Pendiente']}")
+        self.progress.setValue(p["percent"]);self.progress_label.setText(f"Documentadas: {p['documented']}/35   |   Conformes: {p['Conforme']}   |   No conformes: {p['No conforme']}   |   No aplica: {p['No aplica']}   |   Pendientes: {p['Pendiente']}")
         editable=item.status in {"EN_ELABORACION","RECHAZADA"}
         for w in [self.general,self.detail,self.add_photo_button,self.delete_photo_button]:w.setEnabled(editable)
+        self.general_snapshot = self.general_values()
+        self.list.blockSignals(False)
+        self._loading = False
+        self.detail.setEnabled(False)
+        self.add_photo_button.setEnabled(False)
+        self.delete_photo_button.setEnabled(False)
     def select_evidence(self,current,previous=None):
         if not current or current.data(Qt.UserRole) is None:return
-        if not self.save_if_dirty():return
+        if not self.save_if_dirty():
+            self.list.blockSignals(True)
+            self.list.setCurrentItem(previous)
+            self.list.blockSignals(False)
+            return
+        self._loading = True
         try:
-            e=self.service.evidence(current.data(Qt.UserRole));self.current=e.id;self.info.setText(f"{e.category}  |  {e.code} — {e.title}");self.state.setCurrentText(e.status);self.measure.setText(e.measured_value);self.unit.setText(e.unit);self.obs.setPlainText(e.observations);self.na.setText(e.na_reason);self.evidence_snapshot=self.evidence_values();self.gallery.clear()
+            e=self.service.evidence(current.data(Qt.UserRole))
+            editable=e.inspection.status in {"EN_ELABORACION", "RECHAZADA"}
+            for widget in (self.detail, self.add_photo_button, self.delete_photo_button):
+                widget.setEnabled(editable)
+            self.current=e.id;self.info.setText(f"{e.category}  |  {e.code} — {e.title}");self.state.setCurrentText(e.status);self.measure.setText(e.measured_value);self.unit.setText(e.unit);self.obs.setPlainText(e.observations);self.na.setText(e.na_reason);self.evidence_snapshot=self.evidence_values();self.gallery.clear()
             for img in e.images:
                 path=self.images.thumbnail_path(img);entry=QListWidgetItem(img.original_name);entry.setData(Qt.UserRole,img.id)
                 if path.exists():entry.setIcon(QPixmap(str(path)))
                 self.gallery.addItem(entry)
         except Exception as ex:QMessageBox.warning(self,"Error",str(ex))
+        finally:self._loading = False
     def evidence_values(self):
         return (self.state.currentText(),self.measure.text(),self.unit.text(),self.obs.toPlainText(),self.na.text())
     def save_if_dirty(self):
-        if not self.current or not hasattr(self,"evidence_snapshot") or self.evidence_values()==self.evidence_snapshot:return True
-        choice=QMessageBox(self);choice.setWindowTitle("Cambios sin guardar");choice.setText("La evidencia tiene cambios sin guardar.");save=choice.addButton("Guardar",QMessageBox.AcceptRole);choice.addButton("Descartar",QMessageBox.DestructiveRole);cancel=choice.addButton("Cancelar",QMessageBox.RejectRole);choice.exec()
-        if choice.clickedButton()==cancel:return False
-        if choice.clickedButton()==save:
-            try:
-                self.service.save_evidence(self.current,status=self.state.currentText(),measured_value=self.measure.text(),unit=self.unit.text(),observations=self.obs.toPlainText(),na_reason=self.na.text())
-                self.evidence_snapshot=self.evidence_values()
-            except Exception as e:QMessageBox.warning(self,"No se pudo guardar",str(e));return False
-        return True
+        return self.autosave()
     def save_evidence(self):
-        if self.current is None:return
-        try:self.service.save_evidence(self.current,status=self.state.currentText(),measured_value=self.measure.text(),unit=self.unit.text(),observations=self.obs.toPlainText(),na_reason=self.na.text());self.load();self._select_by_id(self.current)
-        except Exception as e:QMessageBox.warning(self,"No se pudo guardar",str(e))
+        if self.autosave():
+            selected = self.current
+            self.load()
+            self._select_by_id(selected)
+        else:
+            QMessageBox.warning(self, "No se pudo guardar", self.save_status.text())
     def add_photos(self):
-        if not self.current:return
+        if not self.current or not self.autosave():return
         paths=QFileDialog.getOpenFileNames(self,"Seleccionar fotografías", "", "Imágenes (*.jpg *.jpeg *.png)")[0]
         if paths:
-            try:self.images.add(self.current,paths);self.load();self._select_by_id(self.current)
+            try:
+                selected=self.current;self.images.add(selected,paths);self.load();self._select_by_id(selected)
             except Exception as e:QMessageBox.warning(self,"No se pudieron agregar las fotografías",str(e))
     def _select_by_id(self,eid):
         for i in range(self.list.count()):
             it=self.list.item(i)
             if it.data(Qt.UserRole)==eid:self.list.setCurrentItem(it);return
     def delete_photo(self):
+        if not self.autosave():return
         it=self.gallery.currentItem()
-        if it and QMessageBox.question(self,"Eliminar fotografía",f"¿Eliminar {it.text()}? El archivo se borrará del almacenamiento.")==QMessageBox.Yes:
-            try:self.images.delete(it.data(Qt.UserRole));self.load();self._select_by_id(self.current)
+        if it and QMessageBox.question(self,"Eliminar fotografía",f"¿Retirar {it.text()} de la evidencia? Se conservará el original para el historial.")==QMessageBox.Yes:
+            try:
+                selected=self.current;self.images.delete(it.data(Qt.UserRole));self.load();self._select_by_id(selected)
             except Exception as e:QMessageBox.warning(self,"No se pudo eliminar",str(e))
     def view_photo(self):
         it=self.gallery.currentItem()
@@ -212,10 +313,9 @@ class InspectionEditor(QDialog):
             e=self.service.evidence(self.current);img=next(x for x in e.images if x.id==it.data(Qt.UserRole));path=self.images.absolute(img.relative_path);QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         except Exception as e:QMessageBox.warning(self,"No se pudo abrir",str(e))
     def save_general(self):
-        try:
-            self.service.update_general(self.iid,inspection_date=self.date.date().toPython(),company=self.company.text(),pqm_number=self.pqm.text(),act_number=self.act.text(),author=self.author.text(),observations=self.generalobs.toPlainText(),conclusion=self.conclusion.text());self.load();QMessageBox.information(self,"Guardado","Los datos generales se guardaron.")
-        except Exception as e:QMessageBox.warning(self,"No se pudo guardar",str(e))
+        self.save_evidence()
     def transition(self,target):
+        if not self.autosave():return
         actor,ok=QInputDialog.getText(self,"Confirmar cambio de estado","Responsable:")
         if not ok:return
         notes,ok=QInputDialog.getText(self,"Observaciones","Observaciones de la acción:")
@@ -223,6 +323,7 @@ class InspectionEditor(QDialog):
         try:self.service.transition(self.iid,target,actor,notes);self.load();QMessageBox.information(self,"Estado actualizado",f"La inspección quedó en {target}.")
         except Exception as e:QMessageBox.warning(self,"No se pudo cambiar el estado",str(e))
     def pdf(self):
+        if not self.autosave():return
         try:
             p=PDFReportService().generate(self.iid,"BORRADOR");QDesktopServices.openUrl(QUrl.fromLocalFile(str(p)))
         except Exception as e:QMessageBox.warning(self,"Error de PDF",str(e))
@@ -236,7 +337,7 @@ class InspectionEditor(QDialog):
                 try:PDFReportService().generate(self.iid,"FINAL")
                 except Exception as e:return QMessageBox.warning(self,"No se pudo generar el PDF final",str(e))
                 report=s.scalar(select(Report).where(Report.inspection_id==self.iid,Report.report_type=="FINAL").order_by(Report.version.desc()))
-            report_path=Path(__import__("pqm_quality_manager.config.settings",fromlist=["DATA_DIR"]).DATA_DIR)/report.path
+            report_path=materialize(s, report.path, DATA_DIR)
             settings={x.key:x.value for x in s.scalars(select(AppSetting)).all()}
             pqm,company=item.pqm_number,item.company
         confirm=QMessageBox.question(self,"Confirmar envío",f"Enviar el informe aprobado de {pqm} – {company} a:\n{settings.get('smtp_recipients','(sin destinatario)')}?",QMessageBox.Yes|QMessageBox.No)
@@ -257,7 +358,8 @@ class InspectionEditor(QDialog):
 class SettingsPage(QWidget):
     def __init__(self,main):
         super().__init__();self.main=main;v=QVBoxLayout(self);title=QLabel("Configuración y respaldo");title.setStyleSheet("font-size:24px;font-weight:700;");v.addWidget(title)
-        info=QLabel("Los datos se guardan localmente en la carpeta de usuario. Las credenciales SMTP se guardan en el almacén seguro del sistema.");info.setWordWrap(True);v.addWidget(info)
+        info=QLabel("Base de datos: " + ("PostgreSQL en servidor" if database_engine.engine.dialect.name == "postgresql" else "SQLite local") + ". Las inspecciones, checkpoints, fotos y PDF se guardan en la base de datos. La conexión se configura abajo (requiere reiniciar). Las credenciales SMTP se guardan en el almacén seguro del sistema.");info.setWordWrap(True);v.addWidget(info)
+        self.database_settings = DatabaseSettings();v.addWidget(self.database_settings)
         group=QGroupBox("Correo para Calidad (SMTP)");form=QFormLayout(group);self.host=QLineEdit();self.port=QSpinBox();self.port.setRange(1,65535);self.port.setValue(587);self.sender=QLineEdit();self.username=QLineEdit();self.password=QLineEdit();self.password.setEchoMode(QLineEdit.Password);self.recipients=QLineEdit();self.ssl=QCheckBox("Usar SSL implícito");
         for label,w in [("Servidor SMTP",self.host),("Puerto",self.port),("Correo remitente",self.sender),("Usuario",self.username),("Contraseña",self.password),("Destinatarios separados por coma",self.recipients)]:form.addRow(label,w)
         form.addRow("Seguridad",self.ssl);v.addWidget(group);buttons=QHBoxLayout();save=QPushButton("Guardar configuración");save.clicked.connect(self.save_config);test=QPushButton("Enviar prueba de conexión");test.clicked.connect(self.test_email);backup=QPushButton("Crear respaldo ZIP");backup.clicked.connect(self.backup);restore=QPushButton("Restaurar respaldo");restore.clicked.connect(self.restore);[buttons.addWidget(b) for b in (save,test,backup,restore)];v.addLayout(buttons);v.addStretch();self.load_config()

@@ -6,6 +6,8 @@ from pqm_quality_manager.database.engine import SessionLocal
 from pqm_quality_manager.database.models import Inspection, InspectionEvidence, EvidenceImage, AuditLog
 from pqm_quality_manager.config.evidence_catalog import EVIDENCE_CATALOG
 
+from pqm_quality_manager.services.checkpoint_service import checkpoint
+
 VALID_TRANSITIONS = {
     "EN_ELABORACION": {"PENDIENTE_REVISION"},
     "PENDIENTE_REVISION": {"APROBADA", "RECHAZADA"},
@@ -31,6 +33,7 @@ class InspectionService:
             s.add(item)
             s.flush()
             s.add(AuditLog(inspection_id=item.id, event="INSPECCION_CREADA", actor=item.author, detail="Registro inicial y 35 evidencias creadas"))
+            checkpoint(s, item, "Inspección creada")
             s.commit()
             return item.id
 
@@ -48,6 +51,7 @@ class InspectionService:
             item.observations, item.conclusion = observations.strip(), conclusion.strip()
             item.updated_at = datetime.now()
             s.add(AuditLog(inspection_id=item.id, event="DATOS_ACTUALIZADOS", actor=author, detail="Datos generales actualizados"))
+            checkpoint(s, item, "Datos generales guardados")
             s.commit()
 
     def get(self, inspection_id: int):
@@ -100,6 +104,7 @@ class InspectionService:
             e.updated_at = datetime.now()
             e.inspection.updated_at = datetime.now()
             s.add(AuditLog(inspection_id=e.inspection_id, event="EVIDENCIA_ACTUALIZADA", detail=f"{e.code}: {status}"))
+            checkpoint(s, e.inspection, f"Evidencia {e.code} guardada")
             s.commit()
 
     def progress(self, inspection_id):
@@ -128,6 +133,7 @@ class InspectionService:
                 item.reviewer = actor.strip(); item.approval_date = datetime.now(); item.approval_notes = notes.strip()
             item.updated_at = datetime.now()
             s.add(AuditLog(inspection_id=item.id, event="CAMBIO_ESTADO", actor=actor, detail=f"{previous} -> {target}. {notes}"))
+            checkpoint(s, item, f"Estado: {target}")
             s.commit()
 
     def soft_delete(self, inspection_id, actor=""):
@@ -135,6 +141,7 @@ class InspectionService:
             item = self._get(s, inspection_id)
             item.deleted = True; item.updated_at = datetime.now()
             s.add(AuditLog(inspection_id=item.id, event="ELIMINACION_LOGICA", actor=actor, detail="Inspección ocultada del historial"))
+            checkpoint(s, item, "Eliminación lógica")
             s.commit()
 
     def duplicate(self, inspection_id):

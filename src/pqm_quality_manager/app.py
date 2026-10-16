@@ -34,9 +34,25 @@ def main():
     configure_logging()
     app=QApplication(sys.argv);app.setApplicationName("PQM Quality Manager");app.setOrganizationName("INGELEAN S.A.S.")
     configure_theme(app)
-    window=MainWindow();window.show()
+    from pqm_quality_manager.database import engine as database_engine
+    from pqm_quality_manager.ui.database_settings import DatabaseConnectionDialog
+    from PySide6.QtWidgets import QDialog
+    while True:
+        try:
+            database_engine.configure_engine()
+            break
+        except Exception as error:
+            logging.error("No se pudo conectar o preparar la base de datos")
+            dialog = DatabaseConnectionDialog(error)
+            if dialog.exec() != QDialog.Accepted:
+                database_engine.engine.dispose()
+                return 1
+    window=MainWindow()
+    window.show()
     try:return app.exec()
     except Exception:
         logging.exception("Error no controlado en la aplicación")
         QMessageBox.critical(window,"Error","Ocurrió un error. Consulte el archivo de registro en la carpeta de datos.")
         return 1
+    finally:
+        database_engine.engine.dispose()

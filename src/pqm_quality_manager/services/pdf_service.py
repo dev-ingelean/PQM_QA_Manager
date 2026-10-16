@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import uuid4
 from io import BytesIO
 import re
 from datetime import datetime
@@ -14,6 +15,8 @@ from pqm_quality_manager.database.engine import SessionLocal
 from pqm_quality_manager.database.models import Inspection, Report
 from pqm_quality_manager.services.image_service import ImageService
 from pqm_quality_manager.services.inspection_service import InspectionError
+from pqm_quality_manager.services.file_storage import store
+from pqm_quality_manager.services.checkpoint_service import checkpoint
 
 class PDFReportService:
     def generate(self, inspection_id: int, report_type="BORRADOR") -> Path:
@@ -33,11 +36,14 @@ class PDFReportService:
                 image_items = [(ImageService.absolute(im.relative_path), im.original_name) for im in ev.images]
                 groups.append((ev.code, ev.category, ev.title, ev.status, ev.measured_value, ev.unit, ev.observations, ev.na_reason, image_items))
             safe_number = re.sub(r"[^A-Za-z0-9._-]+", "_", title_num).strip("._") or "sin_numero"
-            out = REPORT_DIR / f"PQM_{safe_number}_{report_type}_v{version}_{datetime.now():%Y%m%d_%H%M%S}.pdf"
+            out = REPORT_DIR / f"PQM_{safe_number}_{report_type}_v{version}_{datetime.now():%Y%m%d_%H%M%S}_{uuid4().hex[:12]}.pdf"
             report_values = (item.id, version, report_type, out.relative_to(DATA_DIR).as_posix(), report_type == "FINAL")
         self._render(out, title_num, company, act, inspection_date, author, reviewer, status, observations, conclusion, groups, report_type, version)
         with SessionLocal() as s:
-            s.add(Report(inspection_id=report_values[0], version=report_values[1], report_type=report_values[2], path=report_values[3], immutable=report_values[4]))
+            item = s.get(Inspection, inspection_id)
+            item.reports.append(Report(inspection_id=report_values[0], version=report_values[1], report_type=report_values[2], path=report_values[3], immutable=report_values[4]))
+            store(s, report_values[3], out)
+            checkpoint(s, item, "Informe PDF generado")
             s.commit()
         return out
 
