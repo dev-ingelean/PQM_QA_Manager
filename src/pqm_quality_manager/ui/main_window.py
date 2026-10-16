@@ -2,7 +2,7 @@ from pathlib import Path
 from datetime import datetime
 import json
 from PySide6.QtCore import Qt, QDate, QSize, QTimer
-from PySide6.QtGui import QDesktopServices, QColor, QFont, QIcon
+from PySide6.QtGui import QDesktopServices, QColor, QFont, QIcon, QPixmap
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QPushButton, QLabel, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QLineEdit, QComboBox, QMessageBox, QDialog, QDateEdit, QTextEdit, QListWidget, QListWidgetItem, QSplitter, QGroupBox, QFileDialog, QInputDialog, QProgressBar, QCheckBox, QSpinBox, QScrollArea, QTabWidget, QMenu)
 from sqlalchemy import select
@@ -31,8 +31,13 @@ class MainWindow(QMainWindow):
         root = QWidget(); outer = QHBoxLayout(root); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
         side = QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(225); side.setStyleSheet(f"QFrame#sidebar{{background:{NAVY};color:white;}} QLabel{{color:white;}}")
         sv = QVBoxLayout(side);sv.setContentsMargins(16, 24, 16, 20);sv.setSpacing(8)
-        brand = QLabel("INGELEAN");brand.setStyleSheet("font-size:20px;font-weight:700;padding:8px 4px 0;");sv.addWidget(brand)
-        product = QLabel("PQM Quality Manager");product.setWordWrap(True);product.setStyleSheet("font-size:13px;color:#c4d9e9;padding:0 4px 24px;");sv.addWidget(product)
+        brand = QLabel();brand.setObjectName("sidebarLogo");brand.setAlignment(Qt.AlignCenter)
+        brand.setAccessibleName("Logo de INGELEAN");brand.setFixedHeight(68)
+        logo_path = Path(__file__).resolve().parents[1] / "static" / "reports" / "logo-ingelean.png"
+        logo = QPixmap(str(logo_path)).scaled(346, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        logo.setDevicePixelRatio(2);brand.setPixmap(logo)
+        brand.setStyleSheet("background:white;border-radius:8px;padding:10px;");sv.addWidget(brand)
+        product = QLabel("PQM Quality Manager");product.setWordWrap(True);product.setAlignment(Qt.AlignCenter);product.setStyleSheet("font-size:13px;color:#c4d9e9;padding:4px 0 20px;");sv.addWidget(product)
         self.nav_buttons = {}
         self.pages = {}
         for title, key in [("Panel principal", "home"), ("Inspecciones", "history"), ("Configuración", "settings")]:

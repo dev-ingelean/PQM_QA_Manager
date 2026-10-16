@@ -23,8 +23,15 @@ def test_sig_header_background_and_page_count_on_every_page(tmp_path, report_typ
     values = sig_values()
     for number, page in enumerate(reader.pages, 1):
         text = page.extract_text()
+        from pypdf.generic import ContentStream
+        for operands, operator in ContentStream(page.get_contents(), reader).operations:
+            if operator == b"rg":
+                assert float(operands[0]) == pytest.approx(float(operands[1]))
+                assert float(operands[1]) == pytest.approx(float(operands[2]))
+        for font in page["/Resources"].get("/Font", {}).values():
+            assert str(font.get_object().get("/BaseFont", "")).startswith("/Helvetica")
         assert "SISTEMA INTEGRADO DE GESTIÓN (SIG)" in text
-        assert "TIPO DE DOCUMENTO: INFORME DE INSPECCIÓN PQM" in text.replace("\n", " ")
+        assert "TIPO DE DOCUMENTO: INFORME DE INSPECCIÓN PQM" in " ".join(text.split())
         assert values["CodigoDocumento"] in text
         assert values["VersionDocumento"] in text
         assert values["FechaDocumento"] in text
@@ -34,7 +41,7 @@ def test_sig_header_background_and_page_count_on_every_page(tmp_path, report_typ
         assert any(image.image.size == (1236, 1600) for image in page.images)
         with Image.open(ASSET_DIR / "logo-ingelean.png") as logo:
             assert any(image.image.size == logo.size for image in page.images)
-    text = "\n".join(page.extract_text() for page in reader.pages)
+    text = " ".join(" ".join(page.extract_text().split()) for page in reader.pages)
     assert "Empresa de prueba & Asociados" in text
     assert "Observaciones <con caracteres especiales>" in text
     assert "Resumen de inspección" in text
@@ -59,6 +66,8 @@ def test_view_latest_keeps_saved_content_and_immutable_original(tmp_path, monkey
     reports = tmp_path / "reports"; reports.mkdir()
     original = reports / "original-final.pdf"
     canvas = Canvas(str(original), pagesize=A4)
+    canvas.setFont("Times-Roman", 11)
+    canvas.setFillColorRGB(.1, .3, .6)
     canvas.drawString(50, 700, "Contenido aprobado original")
     canvas.save()
     original_bytes = original.read_bytes()
@@ -74,6 +83,10 @@ def test_view_latest_keeps_saved_content_and_immutable_original(tmp_path, monkey
     assert path != original
     assert original.read_bytes() == original_bytes
     text = PdfReader(path).pages[0].extract_text()
+    preview_reader = PdfReader(path)
+    fonts = [font.get_object().get("/BaseFont") for font in preview_reader.pages[0]["/Resources"]["/Font"].values()]
+    assert "/Times-Roman" not in fonts
+    assert "/Helvetica" in fonts
     assert "Contenido aprobado original" in text
     assert "SISTEMA INTEGRADO DE GESTIÓN (SIG)" in text
     assert "Datos actuales distintos" not in text

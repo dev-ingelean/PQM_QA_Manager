@@ -81,19 +81,32 @@ class PDFReportService:
         content = BytesIO()
         doc = SimpleDocTemplate(content, pagesize=A4, rightMargin=RIGHT_MARGIN, leftMargin=LEFT_MARGIN, topMargin=TOP_MARGIN, bottomMargin=BOTTOM_MARGIN, title=f"Informe PQM {pqm}", author="INGELEAN S.A.S.")
         styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(name="PQMTitle", parent=styles["Title"], textColor=colors.HexColor("#12365a"), fontSize=19, leading=24, spaceAfter=6))
-        styles.add(ParagraphStyle(name="PQMSection", parent=styles["Heading2"], textColor=colors.HexColor("#145b83"), fontSize=12, leading=15, spaceBefore=9, spaceAfter=5))
-        styles.add(ParagraphStyle(name="Small", parent=styles["BodyText"], fontSize=8.5, leading=11))
+        for style in styles.byName.values():
+            if not isinstance(style, ParagraphStyle):
+                continue
+            style.fontName = "Helvetica-Bold" if "Bold" in style.fontName else "Helvetica"
+            style.textColor = colors.black
+        styles["BodyText"].fontSize = 11
+        styles["BodyText"].leading = 11 * 1.2 * 1.09
+        styles["BodyText"].spaceAfter = 3.3
+        styles["Heading2"].fontName = "Helvetica-Bold"
+        styles["Heading2"].fontSize = 13
+        styles["Heading2"].leading = 16
+        styles.add(ParagraphStyle(name="PQMTitle", parent=styles["Title"], fontName="Helvetica-Bold",
+                                  textColor=colors.black, fontSize=20, leading=24, spaceAfter=14))
+        styles.add(ParagraphStyle(name="PQMSection", parent=styles["Heading2"], fontName="Helvetica-Bold",
+                                  textColor=colors.black, fontSize=13, leading=16, spaceBefore=12, spaceAfter=5))
+        styles.add(ParagraphStyle(name="Small", parent=styles["BodyText"], fontName="Helvetica", fontSize=9.5, leading=12.4))
         story = [Paragraph("INFORME DE INSPECCIÓN Y ENTREGA DE TABLERO PQM", styles["PQMTitle"])]
         if report_type == "BORRADOR": story.append(Paragraph("<b>DOCUMENTO PRELIMINAR — BORRADOR</b>", styles["Heading2"]))
-        story += [Spacer(1, 5), self._table([["Registro PQM", pqm, "Acta", act], ["Fecha", inspection_date.strftime("%Y-%m-%d"), "Estado", status], ["Empresa", company, "Versión", str(version)]], [27*mm, 53*mm, 20*mm, 62*mm]), Spacer(1, 8), Paragraph("Información general", styles["PQMSection"]), Paragraph(f"<b>Elaborado por:</b> {self._esc(author)} &nbsp;&nbsp; <b>Revisado por:</b> {self._esc(reviewer or 'Pendiente')}", styles["BodyText"])]
+        story += [Spacer(1, 5), self._table([["Registro PQM", pqm, "Acta", act], ["Fecha", inspection_date.strftime("%Y-%m-%d"), "Estado", status], ["Empresa", company, "Versión", str(version)]], [31*mm, 49*mm, 22*mm, 60*mm]), Spacer(1, 8), Paragraph("Información general", styles["PQMSection"]), Paragraph(f"<b>Elaborado por:</b> {self._esc(author)} &nbsp;&nbsp; <b>Revisado por:</b> {self._esc(reviewer or 'Pendiente')}", styles["BodyText"])]
         if general_obs: story.append(Paragraph(f"<b>Observaciones generales:</b> {self._esc(general_obs)}", styles["BodyText"]))
         categories = []
         for row in groups:
             if row[1] not in categories:
                 categories.append(row[1]); story.append(Paragraph(self._esc(row[1]), styles["PQMSection"]))
             code, category, title, state, value, unit, obs, na, images = row
-            story.append(Paragraph(f"<b>{self._esc(code)} — {self._esc(title)}</b> &nbsp; <font color='#145b83'>[{self._esc(state)}]</font>", styles["BodyText"]))
+            story.append(Paragraph(f"<b>{self._esc(code)} — {self._esc(title)}</b> &nbsp; [{self._esc(state)}]", styles["BodyText"]))
             if value: story.append(Paragraph(f"Medición: {self._esc(value)} {self._esc(unit)}", styles["Small"]))
             if obs: story.append(Paragraph(f"Observaciones: {self._esc(obs)}", styles["Small"]))
             if na: story.append(Paragraph(f"Justificación No aplica: {self._esc(na)}", styles["Small"]))
@@ -128,12 +141,12 @@ class PDFReportService:
 
     @staticmethod
     def _table(rows, widths):
-        normal = ParagraphStyle("TableValue", fontName="Helvetica", fontSize=8.5, leading=11)
+        normal = ParagraphStyle("TableValue", fontName="Helvetica", fontSize=10, leading=13)
         bold = ParagraphStyle("TableLabel", parent=normal, fontName="Helvetica-Bold")
         wrapped = [[Paragraph(PDFReportService._esc(value), bold if col in (0, 2) else normal)
                     for col, value in enumerate(row)] for row in rows]
         t = Table(wrapped, colWidths=widths, repeatRows=0)
-        t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.35,colors.HexColor("#cbd5df")), ("BACKGROUND",(0,0),(0,-1),colors.HexColor("#edf3f8")), ("BACKGROUND",(2,0),(2,-1),colors.HexColor("#edf3f8")), ("FONTNAME",(0,0),(0,-1),"Helvetica-Bold"), ("FONTNAME",(2,0),(2,-1),"Helvetica-Bold"), ("FONTSIZE",(0,0),(-1,-1),8.5), ("VALIGN",(0,0),(-1,-1),"MIDDLE"), ("LEFTPADDING",(0,0),(-1,-1),6), ("RIGHTPADDING",(0,0),(-1,-1),6), ("TOPPADDING",(0,0),(-1,-1),6), ("BOTTOMPADDING",(0,0),(-1,-1),6)]))
+        t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.35,colors.black), ("BACKGROUND",(0,0),(0,-1),colors.Color(235/255,235/255,235/255)), ("BACKGROUND",(2,0),(2,-1),colors.Color(235/255,235/255,235/255)), ("FONTNAME",(0,0),(0,-1),"Helvetica-Bold"), ("FONTNAME",(2,0),(2,-1),"Helvetica-Bold"), ("FONTSIZE",(0,0),(-1,-1),10), ("VALIGN",(0,0),(-1,-1),"MIDDLE"), ("LEFTPADDING",(0,0),(-1,-1),6), ("RIGHTPADDING",(0,0),(-1,-1),6), ("TOPPADDING",(0,0),(-1,-1),6), ("BOTTOMPADDING",(0,0),(-1,-1),6)]))
         return t
 
     @staticmethod

@@ -7,7 +7,7 @@ import re
 from xml.sax.saxutils import escape
 
 from pypdf import PdfReader, PdfWriter, Transformation
-from pypdf.generic import RectangleObject
+from pypdf.generic import RectangleObject, ContentStream, NameObject, NumberObject
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
@@ -34,7 +34,7 @@ def sig_values():
 
 
 def sig_header(width, page, total, values):
-    small = ParagraphStyle("SIGCell", fontName="Helvetica", fontSize=7, leading=8.5,
+    small = ParagraphStyle("SIGCell", fontName="Helvetica", fontSize=8, leading=9,
                            alignment=TA_CENTER, textColor=colors.black)
     bold = ParagraphStyle("SIGBold", parent=small, fontName="Helvetica-Bold")
     white = ParagraphStyle("SIGWhite", parent=bold, textColor=colors.white)
@@ -45,7 +45,7 @@ def sig_header(width, page, total, values):
         return Paragraph(escape(str(value)), style)
     rows = [
         [cell("SISTEMA INTEGRADO DE GESTIÓN (SIG)", white), "", "", ""],
-        [brand, cell("TIPO DE DOCUMENTO: INFORME DE INSPECCIÓN PQM", bold), cell("Código:", white), cell(values["CodigoDocumento"])],
+        [brand, Paragraph("TIPO DE DOCUMENTO:<br/>INFORME DE INSPECCIÓN PQM", bold), cell("Código:", white), cell(values["CodigoDocumento"])],
         ["", "", cell("Versión:", white), cell(values["VersionDocumento"])],
         ["", cell("PROCESO: " + values["ProcesoDocumento"], bold), cell("Fecha:", white), cell(values["FechaDocumento"])],
         ["", "", cell("Página:", white), cell(f"{page} de {total}")],
@@ -66,10 +66,46 @@ def sig_header(width, page, total, values):
 
 
 def template_signature():
-    digest = sha256(b"PQM-SIG-layout-v2")
+    digest = sha256(b"PQM-SIG-helvetica-black-v3")
     for name in ("Fondo.jpg", "logo-ingelean.png", "main.tex"):
         digest.update((ASSET_DIR / name).read_bytes())
     return digest.hexdigest()
+
+
+def restyle_saved_page(source):
+    """Apply Helvetica and black text to a display copy without changing photographs."""
+    page = copy(source)
+    resources = page.get("/Resources", {})
+    if hasattr(resources, "get_object"):
+        resources = resources.get_object()
+    fonts = resources.get("/Font", {})
+    if hasattr(fonts, "get_object"):
+        fonts = fonts.get_object()
+    replacements = {"/Times-Roman": "/Helvetica", "/Times-Bold": "/Helvetica-Bold",
+                    "/Times-Italic": "/Helvetica-Oblique", "/Times-BoldItalic": "/Helvetica-BoldOblique"}
+    for reference in fonts.values():
+        font = reference.get_object()
+        if "/FontDescriptor" not in font and str(font.get("/BaseFont")) in replacements:
+            font[NameObject("/BaseFont")] = NameObject(replacements[str(font["/BaseFont"])])
+    content = page.get_contents()
+    if content is not None:
+        stream = ContentStream(content, source.pdf)
+        operations = []
+        inside_text = False
+        for operands, operator in stream.operations:
+            if operator == b"BT":
+                operations.extend([([], b"q"), (operands, operator), ([NumberObject(0)], b"g")])
+                inside_text = True
+            elif operator == b"ET":
+                operations.extend([(operands, operator), ([], b"Q")])
+                inside_text = False
+            elif inside_text and operator in (b"rg", b"g", b"k"):
+                operations.append(([NumberObject(0)], b"g"))
+            else:
+                operations.append((operands, operator))
+        stream.operations = operations
+        page[NameObject("/Contents")] = stream
+    return page
 
 
 def apply_template(content, destination, *, fit_existing=False):
@@ -97,7 +133,7 @@ def apply_template(content, destination, *, fit_existing=False):
             bottom = BOTTOM_MARGIN if corporate else 17*mm
             right = float(source.mediabox.width) - (RIGHT_MARGIN if corporate else 16*mm)
             top = float(source.mediabox.height) - (TOP_MARGIN if corporate else 17*mm)
-            cropped = copy(source)
+            cropped = restyle_saved_page(source)
             cropped.cropbox = RectangleObject((left, bottom, right, top))
             scale = min((width-LEFT_MARGIN-RIGHT_MARGIN)/(right-left),
                         (height-TOP_MARGIN-BOTTOM_MARGIN)/(top-bottom))
