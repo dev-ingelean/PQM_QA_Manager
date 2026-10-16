@@ -1,0 +1,2 @@
+-- Esquema inicial administrado por SQLAlchemy Base.metadata.create_all.
+-- Archivo marcador para el versionado inicial; no ejecutar manualmente.

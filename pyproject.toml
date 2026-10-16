@@ -1,0 +1,23 @@
+[project]
+name = "pqm-quality-manager"
+version = "0.1.0"
+description = "Gestión local de inspecciones PQM para INGELEAN S.A.S."
+requires-python = ">=3.12"
+dependencies = [
+  "PySide6>=6.7",
+  "SQLAlchemy>=2.0",
+  "Pillow>=10.0",
+  "reportlab>=4.0",
+  "pypdf>=4.0",
+  "keyring>=25.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pyinstaller>=6.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.uv]
+package = false
