@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="#12365A"/>
+  <!-- Geometric PQM lettering remains independent of installed fonts. -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M42 145V91H64Q82 91 82 108Q82 125 64 125H42"/>
+    <rect x="101" y="91" width="40" height="54" rx="17"/>
+    <path d="M128 133L145 150M163 145V91L184 119L205 91V145"/>
+  </g>
+  <path d="M99 184L119 204L159 164" fill="none" stroke="#53D6BA" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

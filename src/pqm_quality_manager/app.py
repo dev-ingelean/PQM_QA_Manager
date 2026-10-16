@@ -1,6 +1,7 @@
 import sys
 import logging
-from PySide6.QtGui import QColor, QPalette
+from pathlib import Path
+from PySide6.QtGui import QColor, QIcon, QPalette
 from PySide6.QtWidgets import QApplication, QMessageBox
 from pqm_quality_manager.ui.main_window import MainWindow
 from pqm_quality_manager.utils.logging_config import configure_logging
@@ -33,6 +34,7 @@ def configure_theme(app):
 def main():
     configure_logging()
     app=QApplication(sys.argv);app.setApplicationName("PQM Quality Manager");app.setOrganizationName("INGELEAN S.A.S.")
+    app.setWindowIcon(QIcon(str(Path(__file__).resolve().parent / "static" / "app.ico")))
     configure_theme(app)
     from pqm_quality_manager.database import engine as database_engine
     from pqm_quality_manager.ui.database_settings import DatabaseConnectionDialog
