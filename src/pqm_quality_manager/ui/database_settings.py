@@ -1,9 +1,10 @@
 """Connection form available both in Settings and before database startup."""
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QSpinBox, QVBoxLayout,
+    QComboBox, QDialog, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QPushButton, QSpinBox, QVBoxLayout, QGridLayout, QWidget,
 )
+from pqm_quality_manager.ui.settings_style import SETTINGS_STYLE, section_header, field
 from sqlalchemy import text
 from pqm_quality_manager.config.database_connection import (
     ConnectionConfig, ConnectionConfigError, connection_error, load_connection, save_connection,
@@ -39,9 +40,14 @@ class DatabaseSettings(QGroupBox):
     saved = Signal()
 
     def __init__(self, parent=None, *, recovery=False):
-        super().__init__("Base de datos", parent)
+        super().__init__(parent)
+        self.setObjectName("settingsCard")
+        self.setStyleSheet(SETTINGS_STYLE)
         self.recovery = recovery
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24); layout.setSpacing(14)
+        section_header(layout, "Conexión a la base de datos",
+                       "Elige dónde guardar las inspecciones y los archivos de este equipo.")
         self.mode = QComboBox()
         self.mode.addItem("PostgreSQL en servidor", "postgresql")
         self.mode.addItem("SQLite en este equipo", "sqlite")
@@ -49,39 +55,46 @@ class DatabaseSettings(QGroupBox):
         self.port = QSpinBox(); self.port.setRange(1, 65535)
         self.database = QLineEdit(); self.username = QLineEdit()
         self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.Password)
-        self.show_password = QPushButton("Mostrar contraseña"); self.show_password.setCheckable(True)
+        self.show_password = QPushButton("Mostrar"); self.show_password.setObjectName("passwordToggle"); self.show_password.setCheckable(True)
         self.show_password.toggled.connect(self.toggle_password)
         self.sslmode = QComboBox()
         for label, mode in (("Red local (sin TLS)", "disable"), ("Según el servidor", "prefer"),
                             ("Requerir TLS", "require"), ("Verificar certificado", "verify-ca"),
                             ("Verificar certificado y nombre", "verify-full")):
             self.sslmode.addItem(label, mode)
-        form = QFormLayout()
-        for label, widget in (("Ubicación de los datos", self.mode), ("Servidor", self.host),
-                              ("Puerto", self.port), ("Base de datos", self.database),
-                              ("Usuario", self.username), ("Contraseña", self.password),
-                              ("Conexión", self.sslmode)):
-            form.addRow(label, widget)
-        form.addRow("", self.show_password)
+        form = QGridLayout(); form.setHorizontalSpacing(20); form.setVerticalSpacing(16)
+        form.setColumnStretch(0, 1); form.setColumnStretch(1, 1)
+        field(form, 0, 0, "Ubicación de los datos", self.mode)
+        field(form, 0, 1, "Tipo de conexión", self.sslmode)
+        field(form, 1, 0, "Servidor", self.host)
+        field(form, 1, 1, "Puerto", self.port)
+        field(form, 2, 0, "Base de datos", self.database)
+        field(form, 2, 1, "Usuario", self.username)
+        password_row = QWidget(); password_layout = QHBoxLayout(password_row)
+        password_layout.setContentsMargins(0, 0, 0, 0); password_layout.setSpacing(8)
+        password_layout.addWidget(self.password, 1); password_layout.addWidget(self.show_password)
+        field(form, 3, 0, "Contraseña", password_row, span=2)
         layout.addLayout(form)
+        layout.addSpacing(4)
         buttons = QHBoxLayout()
         self.test_button = QPushButton("Probar conexión")
         self.save_button = QPushButton("Guardar y conectar" if recovery else "Guardar conexión")
         self.test_button.clicked.connect(self.test_connection)
         self.save_button.clicked.connect(self.save)
-        buttons.addWidget(self.test_button); buttons.addWidget(self.save_button)
+        self.save_button.setProperty("class", "primary")
+        buttons.addStretch(); buttons.addWidget(self.test_button); buttons.addWidget(self.save_button)
         layout.addLayout(buttons)
-        self.status = QLabel(); self.status.setWordWrap(True); layout.addWidget(self.status)
+        self.status = QLabel(); self.status.setObjectName("connectionStatus"); self.status.setWordWrap(True); self.status.hide(); layout.addWidget(self.status)
         note = QLabel("La conexión se guarda en este equipo. " +
                       ("" if recovery else "Se aplicará al volver a abrir la aplicación. ") +
                       "Cambiar de base de datos no traslada los registros existentes.")
-        note.setWordWrap(True); layout.addWidget(note)
+        note.setObjectName("settingsHint"); note.setWordWrap(True); layout.addWidget(note)
         self.task = None
         self.testing = False
         try:
             self.initial = load_connection()
         except Exception as error:
-            self.status.setText(connection_error(error))
+            self.set_status(connection_error(error))
             try:
                 self.initial = load_connection(include_password=False)
             except Exception:
@@ -94,9 +107,13 @@ class DatabaseSettings(QGroupBox):
         self.mode.currentIndexChanged.connect(self.update_mode)
         self.update_mode()
 
+    def set_status(self, message):
+        self.status.setText(message)
+        self.status.setVisible(bool(message))
+
     def toggle_password(self, show):
         self.password.setEchoMode(QLineEdit.Normal if show else QLineEdit.Password)
-        self.show_password.setText("Ocultar contraseña" if show else "Mostrar contraseña")
+        self.show_password.setText("Ocultar" if show else "Mostrar")
 
     def update_mode(self):
         enabled = self.mode.currentData() == "postgresql" and not self.testing
@@ -117,11 +134,11 @@ class DatabaseSettings(QGroupBox):
             config = self.config()
             config.url()
         except Exception as error:
-            self.status.setText(connection_error(error)); return
+            self.set_status(connection_error(error)); return
         self.testing = True
         self.mode.setEnabled(False); self.update_mode()
         self.test_button.setEnabled(False); self.save_button.setEnabled(False)
-        self.status.setText("Comprobando conexión…")
+        self.set_status("Comprobando conexión…")
         self.task = ConnectionTest(config)
         self.task.signals.done.connect(self.test_finished)
         QThreadPool.globalInstance().start(self.task)
@@ -130,18 +147,18 @@ class DatabaseSettings(QGroupBox):
         self.testing = False
         self.mode.setEnabled(True); self.update_mode()
         self.test_button.setEnabled(True); self.save_button.setEnabled(True)
-        self.status.setText(message)
+        self.set_status(message)
 
     def save(self):
         try:
             save_connection(self.config())
         except ConnectionConfigError as error:
-            self.status.setText(str(error))
+            self.set_status(str(error))
             return
         except Exception:
-            self.status.setText("No se pudo guardar. Revise los campos y los permisos de la carpeta de datos.")
+            self.set_status("No se pudo guardar. Revise los campos y los permisos de la carpeta de datos.")
             return
-        self.status.setText("Conexión guardada." if self.recovery else
+        self.set_status("Conexión guardada." if self.recovery else
                             "Conexión guardada. Cierre y vuelva a abrir la aplicación para aplicarla.")
         self.saved.emit()
 
@@ -150,7 +167,8 @@ class DatabaseConnectionDialog(QDialog):
     def __init__(self, error, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Configurar conexión a la base de datos")
-        self.resize(560, 540)
+        self.resize(680, 650)
+        self.setStyleSheet(SETTINGS_STYLE)
         layout = QVBoxLayout(self)
         message = QLabel(connection_error(error)); message.setWordWrap(True)
         layout.addWidget(message)

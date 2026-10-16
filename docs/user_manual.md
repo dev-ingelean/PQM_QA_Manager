@@ -11,3 +11,7 @@
 Para centralizar datos, fotos y PDF en un servidor, consulte [la guía de PostgreSQL](postgresql.md).
 
 En **Configuración → Base de datos**, seleccione PostgreSQL y complete servidor, puerto, base, usuario y contraseña. Pulse **Probar conexión**, después **Guardar conexión** y vuelva a abrir la aplicación. Si no puede conectar al iniciar, el mismo formulario permite corregirla.
+
+La pantalla de Configuración se organiza en tres pestañas: **Base de datos**, **Correo** y **Respaldos**. Cada una tiene sus propios campos y botones; el indicador superior muestra la base utilizada en la sesión actual.
+
+El panel principal muestra tarjetas de resumen que se redistribuyen al cambiar el ancho de la ventana. En Inspecciones, use los filtros de búsqueda y estado y el menú **Informes** para los PDF. El editor separa **Datos generales** y **Evidencias**, con **Evaluación** y **Fotografías** juntas en la misma vista. **Guardar avance** guarda los cambios; **Documentos** agrupa la generación y envío de informes, y **Cambiar estado** contiene revisión, aprobación, rechazo y cierre.
