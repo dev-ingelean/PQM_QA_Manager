@@ -46,3 +46,16 @@ EVIDENCE_CATALOG = tuple(
     )
 )
 assert len(EVIDENCE_CATALOG) == 35
+
+
+def measurement_unit(code: str) -> str | None:
+    """Unidad fija para las evidencias eléctricas del catálogo."""
+    if code.startswith("ALIM-"):
+        return "V"
+    if code.startswith(("ARE1-", "ARE2-", "ARE3-")):
+        suffix = code.split("-", 1)[1]
+        if suffix in {"VAB", "VCB", "VAC", "MULTIMETRO"}:
+            return "V"
+        if suffix in {"IA", "IB", "IC"}:
+            return "A"
+    return None

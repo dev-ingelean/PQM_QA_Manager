@@ -1,10 +1,12 @@
+import hashlib
+import hmac
 from datetime import date, datetime
 from uuid import uuid4
 from sqlalchemy import select, func, or_
 from sqlalchemy.exc import IntegrityError
 from pqm_quality_manager.database.engine import SessionLocal
 from pqm_quality_manager.database.models import Inspection, InspectionEvidence, EvidenceImage, AuditLog
-from pqm_quality_manager.config.evidence_catalog import EVIDENCE_CATALOG
+from pqm_quality_manager.config.evidence_catalog import EVIDENCE_CATALOG, measurement_unit
 
 from pqm_quality_manager.services.checkpoint_service import checkpoint
 
@@ -99,7 +101,7 @@ class InspectionService:
             self._editable(e.inspection)
             if status == "No aplica" and not na_reason.strip(): raise InspectionError("Escriba la justificación para marcar No aplica.")
             if status != "No aplica": na_reason = ""
-            e.status, e.measured_value, e.unit = status, measured_value.strip(), unit.strip()
+            e.status, e.measured_value, e.unit = status, measured_value.strip(), measurement_unit(e.code) or unit.strip()
             e.observations, e.na_reason = observations.strip(), na_reason.strip()
             e.updated_at = datetime.now()
             e.inspection.updated_at = datetime.now()
@@ -136,7 +138,10 @@ class InspectionService:
             checkpoint(s, item, f"Estado: {target}")
             s.commit()
 
-    def soft_delete(self, inspection_id, actor=""):
+    def soft_delete(self, inspection_id, actor="", *, password=""):
+        supplied_hash = hashlib.sha256(password.encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(supplied_hash, "5bfe7c7024193c142ee7849d02bc6f961bef35ed0848e258935fbbee38b70b82"):
+            raise InspectionError("Clave de eliminación incorrecta.")
         with SessionLocal() as s:
             item = self._get(s, inspection_id)
             item.deleted = True; item.updated_at = datetime.now()

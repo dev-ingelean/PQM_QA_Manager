@@ -55,3 +55,30 @@ def test_approval_flow_and_locked_records(service):
         svc.update_general(iid,inspection_date=date.today(),company="Cliente",pqm_number="PQM-4",act_number="ACT",author="Tech")
     svc.transition(iid,"CERRADA",actor="Revisor")
     assert svc.get(iid).status=="CERRADA"
+
+
+def test_delete_requires_key_and_preserves_record_on_failure(service):
+    svc, factory = service
+    iid = svc.create(date.today(), "Cliente", "PQM-DELETE", "ACT", "Tech")
+    for password in ("", "incorrecta"):
+        with pytest.raises(InspectionError, match="Clave de eliminación incorrecta"):
+            svc.soft_delete(iid, password=password)
+        with factory() as session:
+            assert session.get(Inspection, iid).deleted is False
+    svc.soft_delete(iid, password="1ng3l3an20**")
+    with factory() as session:
+        item = session.get(Inspection, iid)
+        assert item.deleted is True
+        assert len(item.evidences) == 35
+
+
+@pytest.mark.parametrize("code,expected", [("ALIM-UPS-IN", "V"), ("ARE1-VAB", "V"), ("ARE2-MULTIMETRO", "V"), ("ARE3-IA", "A")])
+def test_electrical_units_are_fixed_when_saving(service, code, expected):
+    svc, factory = service
+    iid = svc.create(date.today(), "Cliente", "PQM-UNIT", "ACT", "Tech")
+    with factory() as session:
+        eid = session.scalar(select(InspectionEvidence.id).where(
+            InspectionEvidence.inspection_id == iid, InspectionEvidence.code == code))
+    svc.save_evidence(eid, status="Conforme", measured_value="120", unit="incorrecta")
+    with factory() as session:
+        assert session.get(InspectionEvidence, eid).unit == expected

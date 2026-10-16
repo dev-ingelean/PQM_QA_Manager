@@ -16,6 +16,7 @@ from pqm_quality_manager.database.models import AppSetting, Inspection, Report, 
 from pqm_quality_manager.database import engine as database_engine
 from pqm_quality_manager.services.file_storage import materialize
 from pqm_quality_manager.services.checkpoint_service import history
+from pqm_quality_manager.config.evidence_catalog import measurement_unit
 from pqm_quality_manager.config.settings import DATA_DIR
 from pqm_quality_manager.ui.database_settings import DatabaseSettings
 from pqm_quality_manager.ui.settings_style import SETTINGS_STYLE, section_header, field
@@ -197,12 +198,16 @@ class HistoryPage(QWidget):
         iid=self.selected_id()
         if not iid:return
         if QMessageBox.question(self,"Eliminar inspección","Se ocultará del historial para conservar la trazabilidad. ¿Desea continuar?")==QMessageBox.Yes:
-            try:self.main.service.soft_delete(iid);self.refresh()
-            except Exception as e:QMessageBox.warning(self,"Error",str(e))
+            password, accepted = QInputDialog.getText(
+                self, "Autorizar eliminación", "Ingrese la clave de eliminación:", QLineEdit.Password
+            )
+            if not accepted:return
+            try:self.main.service.soft_delete(iid, password=password);self.refresh()
+            except Exception as e:QMessageBox.warning(self,"No se pudo eliminar",str(e))
 
 class InspectionForm(QDialog):
     def __init__(self, parent, prefill=None):
-        super().__init__(parent); self.setWindowTitle("Nueva inspección PQM"); self.resize(720, 640)
+        super().__init__(parent); self.setWindowFlag(Qt.WindowMinMaxButtonsHint, True); self.setWindowTitle("Nueva inspección PQM"); self.resize(720, 640)
         self.setStyleSheet(VIEW_STYLE)
         v = QVBoxLayout(self);v.setContentsMargins(24, 24, 24, 24);v.setSpacing(18)
         page_header(v, "Nueva inspección", "Completa los datos iniciales. Los campos con * son obligatorios.")
@@ -225,7 +230,7 @@ class InspectionForm(QDialog):
 class InspectionEditor(QDialog):
     def __init__(self, parent, iid):
         super().__init__(parent);self.main=parent;self.iid=iid;self.service=parent.service;self.images=ImageService()
-        self.setWindowTitle("Inspección PQM");self.resize(1180, 800);self.setStyleSheet(VIEW_STYLE);self.current=None
+        self.setWindowFlag(Qt.WindowMinMaxButtonsHint, True); self.setWindowTitle("Inspección PQM");self.resize(1180, 800);self.setStyleSheet(VIEW_STYLE);self.current=None
         self._loading=False;self._saving=False
         self.autosave_timer=QTimer(self);self.autosave_timer.setSingleShot(True);self.autosave_timer.setInterval(1500)
         self.autosave_timer.timeout.connect(self.autosave)
@@ -368,7 +373,7 @@ class InspectionEditor(QDialog):
         try:
             with SessionLocal() as session:
                 checkpoints = history(session, self.iid)
-            dialog = QDialog(self); dialog.setWindowTitle("Últimos 100 checkpoints"); dialog.resize(800, 600);dialog.setStyleSheet(VIEW_STYLE)
+            dialog = QDialog(self); dialog.setWindowFlag(Qt.WindowMinMaxButtonsHint, True); dialog.setWindowTitle("Últimos 100 checkpoints"); dialog.resize(800, 600);dialog.setStyleSheet(VIEW_STYLE)
             layout = QVBoxLayout(dialog); entries = QComboBox(); preview = QTextEdit(); preview.setReadOnly(True)
             for entry in checkpoints:
                 entries.addItem(f"#{entry.id} · {entry.created_at:%Y-%m-%d %H:%M:%S} · {entry.reason}", entry.snapshot)
@@ -416,7 +421,7 @@ class InspectionEditor(QDialog):
             editable=e.inspection.status in {"EN_ELABORACION", "RECHAZADA"}
             for widget in (self.detail, self.add_photo_button, self.delete_photo_button):
                 widget.setEnabled(editable)
-            self.current=e.id;self.info.setText(f"{e.category}  |  {e.code} — {e.title}");self.state.setCurrentText(e.status);self.measure.setText(e.measured_value);self.unit.setText(e.unit);self.obs.setPlainText(e.observations);self.na.setText(e.na_reason);self.evidence_snapshot=self.evidence_values();self.gallery.clear()
+            self.current=e.id;self.info.setText(f"{e.category}  |  {e.code} — {e.title}");self.state.setCurrentText(e.status);self.measure.setText(e.measured_value);self.unit.setReadOnly(measurement_unit(e.code) is not None);self.unit.setText(measurement_unit(e.code) or e.unit);self.obs.setPlainText(e.observations);self.na.setText(e.na_reason);self.evidence_snapshot=self.evidence_values();self.gallery.clear()
             for img in e.images:
                 path=self.images.thumbnail_path(img);entry=QListWidgetItem(img.original_name);entry.setData(Qt.UserRole,img.id)
                 if path.exists():entry.setIcon(QIcon(str(path)))
