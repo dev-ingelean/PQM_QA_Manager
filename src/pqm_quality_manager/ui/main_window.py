@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
         super().__init__(); self.setWindowTitle("PQM Quality Manager | INGELEAN S.A.S."); self.resize(1280, 800)
         self.service = InspectionService(); self.stack = QStackedWidget()
         root = QWidget(); outer = QHBoxLayout(root); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
-        side = QFrame(); side.setFixedWidth(225); side.setStyleSheet(f"background:{NAVY}; color:white;")
+        side = QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(225); side.setStyleSheet(f"QFrame#sidebar{{background:{NAVY};color:white;}} QLabel{{color:white;}}")
         sv = QVBoxLayout(side); brand = QLabel("INGELEAN\nPQM Quality Manager"); brand.setStyleSheet("font-size:18px;font-weight:700;padding:24px 12px;"); sv.addWidget(brand)
         self.pages = {}
         for title, key in [("Panel principal", "home"), ("Inspecciones", "history"), ("Configuración", "settings")]:
